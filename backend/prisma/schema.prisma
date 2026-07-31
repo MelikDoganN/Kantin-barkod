@@ -1,0 +1,516 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------
+// ENUM'LAR
+// ------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  PERSONNEL
+}
+
+enum UserStatus {
+  ACTIVE
+  PASSIVE
+}
+
+enum PaymentType {
+  CASH
+  CARD
+  CREDIT
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum StockMovementType {
+  PURCHASE
+  CARTON_OPEN
+  TRANSFER
+  SALE
+  SALE_CANCEL
+  RETURN
+  WASTE
+  PERSONNEL_CONSUMPTION
+  ADJUSTMENT
+  COUNT_ADJUSTMENT
+  INITIAL_STOCK
+}
+
+enum CreditTransactionType {
+  DEBT
+  PAYMENT
+}
+
+enum DayEndStatus {
+  PENDING
+  COMPLETED
+  REVIEWED
+}
+
+enum SaleStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+}
+
+// ------------------------------------------------------------------
+// KULLANICI SİSTEMİ
+// ------------------------------------------------------------------
+
+model User {
+  id           Int        @id @default(autoincrement())
+  fullName     String
+  username     String     @unique
+  passwordHash String
+  phone        String?
+  role         UserRole   @default(PERSONNEL)
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  shifts                Shift[]
+  sales                 Sale[]
+  cancelledSales        Sale[]                 @relation("SaleCancelledBy")
+  stockMovements        StockMovement[]
+  stockCounts           StockCount[]
+  wasteRecords          WasteRecord[]
+  personnelConsumptions PersonnelConsumption[]
+  dayEnds               DayEnd[]
+  auditLogs             AuditLog[]
+  backupRecords         BackupRecord[]
+  cashAdjustments       CashAdjustment[]
+
+  @@index([role])
+  @@index([status])
+}
+
+// ------------------------------------------------------------------
+// KATEGORİ
+// ------------------------------------------------------------------
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products       Product[]
+  systemSettings SystemSetting[]
+}
+
+// ------------------------------------------------------------------
+// ÜRÜN
+// ------------------------------------------------------------------
+
+model Product {
+  id             Int      @id @default(autoincrement())
+  name           String
+  barcode        String?  @unique
+  categoryId     Int
+  purchasePrice  Decimal  @db.Decimal(12, 2)
+  salePrice      Decimal  @db.Decimal(12, 2)
+  unitType       String   @default("unit")
+  unitsPerCarton Int      @default(1)
+  minimumStock   Int      @default(0)
+  image          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id])
+
+  inventory             Inventory?
+  stockMovements        StockMovement[]
+  saleItems             SaleItem[]
+  stockCountItems       StockCountItem[]
+  wasteRecords          WasteRecord[]
+  personnelConsumptions PersonnelConsumption[]
+
+  @@index([categoryId])
+}
+
+// ------------------------------------------------------------------
+// STOK (Bir ürüne tek stok kaydı)
+// ------------------------------------------------------------------
+
+model Inventory {
+  id                Int      @id @default(autoincrement())
+  productId         Int      @unique
+  warehouseQuantity Int      @default(0)
+  shelfQuantity     Int      @default(0)
+  updatedAt         DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+}
+
+// ------------------------------------------------------------------
+// STOK HAREKETİ
+// ------------------------------------------------------------------
+
+model StockMovement {
+  id              Int               @id @default(autoincrement())
+  productId       Int
+  type            StockMovementType
+  quantity        Int
+  beforeWarehouse Int
+  afterWarehouse  Int
+  beforeShelf     Int
+  afterShelf      Int
+  description     String?
+  userId          Int?
+  createdAt       DateTime          @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@index([productId])
+  @@index([userId])
+}
+
+// ------------------------------------------------------------------
+// VARDİYA
+// ------------------------------------------------------------------
+
+model Shift {
+  id           Int         @id @default(autoincrement())
+  userId       Int
+  status       ShiftStatus @default(OPEN)
+  startTime    DateTime    @default(now())
+  endTime      DateTime?
+  openingCash  Decimal     @db.Decimal(12, 2)
+  closingCash  Decimal?    @db.Decimal(12, 2)
+  expectedCash Decimal?    @db.Decimal(12, 2)
+  difference   Decimal?    @db.Decimal(12, 2)
+  note         String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  sales  Sale[]
+  dayEnd DayEnd?
+
+  @@index([userId])
+}
+
+// ------------------------------------------------------------------
+// SATIŞ
+// ------------------------------------------------------------------
+
+model Sale {
+  id             Int          @id @default(autoincrement())
+  userId         Int
+  shiftId        Int
+  status         SaleStatus   @default(COMPLETED)
+  paymentType    PaymentType?
+  subtotal       Decimal      @db.Decimal(12, 2)
+  discount       Decimal      @default(0) @db.Decimal(12, 2)
+  total          Decimal      @db.Decimal(12, 2)
+  cancelledAt    DateTime?
+  cancelledById  Int?
+  cancelReason   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user         User  @relation(fields: [userId], references: [id])
+  cancelledBy  User? @relation("SaleCancelledBy", fields: [cancelledById], references: [id])
+  shift        Shift @relation(fields: [shiftId], references: [id])
+
+  items              SaleItem[]
+  payments           Payment[]
+  creditTransactions CreditTransaction[]
+
+  @@index([userId])
+  @@index([shiftId])
+  @@index([createdAt])
+  @@index([status])
+  @@index([cancelledById])
+}
+
+// ------------------------------------------------------------------
+// SATIŞ KALEMİ
+// ------------------------------------------------------------------
+
+model SaleItem {
+  id         Int     @id @default(autoincrement())
+  saleId     Int
+  productId  Int
+  quantity   Int
+  unitPrice  Decimal @db.Decimal(12, 2)
+  totalPrice Decimal @db.Decimal(12, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+// ------------------------------------------------------------------
+// ÖDEME
+// ------------------------------------------------------------------
+
+model Payment {
+  id        Int         @id @default(autoincrement())
+  saleId    Int
+  type      PaymentType
+  amount    Decimal     @db.Decimal(12, 2)
+  createdAt DateTime    @default(now())
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+}
+
+// ------------------------------------------------------------------
+// MÜŞTERİ / BORÇ
+// ------------------------------------------------------------------
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  note      String?
+  totalDebt Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creditTransactions CreditTransaction[]
+}
+
+model CreditTransaction {
+  id          Int                   @id @default(autoincrement())
+  customerId  Int
+  saleId      Int?
+  type        CreditTransactionType
+  amount      Decimal               @db.Decimal(12, 2)
+  description String?
+  createdAt   DateTime              @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  sale     Sale?    @relation(fields: [saleId], references: [id])
+
+  @@index([customerId])
+  @@index([saleId])
+}
+
+// ------------------------------------------------------------------
+// GÜN SONU
+// ------------------------------------------------------------------
+
+model DayEnd {
+  id             Int          @id @default(autoincrement())
+  shiftId        Int          @unique
+  userId         Int
+  status         DayEndStatus @default(PENDING)
+  totalSales     Decimal      @db.Decimal(12, 2)
+  cashAmount     Decimal      @db.Decimal(12, 2)
+  cardAmount     Decimal      @db.Decimal(12, 2)
+  creditAmount   Decimal      @db.Decimal(12, 2)
+  cashDifference Decimal      @db.Decimal(12, 2)
+  createdAt      DateTime     @default(now())
+
+  shift Shift @relation(fields: [shiftId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  cashAdjustments CashAdjustment[]
+
+  @@index([userId])
+}
+
+// ------------------------------------------------------------------
+// SAYIM
+// ------------------------------------------------------------------
+
+model StockCount {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  type        String
+  status      String    @default("PENDING")
+  date        DateTime  @default(now())
+  description String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user  User             @relation(fields: [userId], references: [id])
+  items StockCountItem[]
+
+  @@index([userId])
+}
+
+model StockCountItem {
+  id              Int     @id @default(autoincrement())
+  stockCountId    Int
+  productId       Int
+  systemQuantity  Int
+  countedQuantity Int?
+  difference      Int?
+  note            String?
+
+  stockCount StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([stockCountId])
+  @@index([productId])
+}
+
+// ------------------------------------------------------------------
+// FİRE / ZAYİ
+// ------------------------------------------------------------------
+
+model WasteRecord {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  quantity    Int
+  reason      String
+  description String?
+  userId      Int?
+  createdAt   DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@index([productId])
+  @@index([userId])
+}
+
+// ------------------------------------------------------------------
+// PERSONEL TÜKETİMİ
+// ------------------------------------------------------------------
+
+model PersonnelConsumption {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  productId Int
+  quantity  Int
+  cost      Decimal  @db.Decimal(12, 2)
+  reason    String
+  note      String?
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([userId])
+  @@index([productId])
+}
+
+// ------------------------------------------------------------------
+// İŞLEM GEÇMİŞİ (AUDIT LOG)
+// ------------------------------------------------------------------
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int?
+  module      String
+  actionType  String
+  title       String
+  description String?
+  entityType  String
+  entityId    Int?
+  entityLabel String?
+  oldValues   Json?
+  newValues   Json?
+  deviceName  String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([module, createdAt])
+  @@index([actionType, createdAt])
+}
+
+// ------------------------------------------------------------------
+// AYARLAR (eski key-value — kullanılabilir)
+// ------------------------------------------------------------------
+
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ------------------------------------------------------------------
+// SİSTEM AYARLARI (tek kayıt)
+// ------------------------------------------------------------------
+
+model SystemSetting {
+  id                  String    @id @default(cuid())
+  businessName        String    @default("Kantin POS")
+  phone               String?
+  address             String?
+  logoPath            String?
+  currency            String    @default("TRY")
+  dateFormat          String    @default("DD.MM.YYYY")
+  defaultCategoryId   Int?
+  theme               String    @default("LIGHT")
+  barcodeEnabled      Boolean   @default(true)
+  barcodeAutoAdd      Boolean   @default(true)
+  barcodeQuantityMode Boolean   @default(false)
+  lowStockThreshold   Int       @default(10)
+  backupDirectory     String?
+  autoBackupEnabled   Boolean   @default(false)
+  autoBackupFrequency String?
+  lastBackupAt        DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  defaultCategory Category? @relation(fields: [defaultCategoryId], references: [id])
+}
+
+// ------------------------------------------------------------------
+// YEDEKLEME KAYITLARI
+// ------------------------------------------------------------------
+
+model BackupRecord {
+  id           String   @id @default(cuid())
+  fileName     String
+  filePath     String
+  fileSize     BigInt?
+  status       String
+  errorMessage String?
+  createdById  Int?
+  createdAt    DateTime @default(now())
+
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+// ------------------------------------------------------------------
+// KASA DÜZELTME (ADMIN)
+// ------------------------------------------------------------------
+
+model CashAdjustment {
+  id          Int      @id @default(autoincrement())
+  amount      Decimal  @db.Decimal(12, 2)
+  description String
+  userId      Int
+  dayEndId    Int?
+  createdAt   DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id])
+  dayEnd DayEnd? @relation(fields: [dayEndId], references: [id])
+
+  @@index([userId])
+  @@index([dayEndId])
+  @@index([createdAt])
+}

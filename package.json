@@ -1,0 +1,93 @@
+{
+  "name": "kantin-barkod",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Profesyonel kantin barkodlu satis ve stok yonetim POS uygulamasi",
+  "author": "Kantin POS",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:backend": "npm run build --prefix backend",
+    "prepare:backend": "node scripts/prepare-backend-resources.mjs",
+    "download:node": "node scripts/download-node-runtime.mjs",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "electron:prod": "npm run build && npm run build:backend && electron .",
+    "dist": "npm run download:node && npm run build && npm run build:backend && npm run prepare:backend && electron-builder --win dir",
+    "build:installer": "node scripts/build-installer.mjs",
+    "dist:installer": "npm run dist && npm run build:installer"
+  },
+  "dependencies": {
+    "lucide-react": "^0.454.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "com.kantinpos.app",
+    "productName": "Kantin POS",
+    "copyright": "Copyright © Kantin POS",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!README.md"
+        ]
+      },
+      {
+        "from": "resources/runtime/node",
+        "to": "runtime/node",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kantin POS"
+    },
+    "asar": true
+  }
+}

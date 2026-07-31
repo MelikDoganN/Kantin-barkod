@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-electron
+release
+dist-installer
+resources/backend/**
+!resources/backend/README.md
+resources/runtime/node/**
+installer/vendor/**
+!installer/vendor/README.md
+*.local
+.env
+.DS_Store
+npm-debug.log*
+tsc-out.txt
+*.tsbuildinfo

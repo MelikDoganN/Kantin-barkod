@@ -1,0 +1,10 @@
+-- CreateEnum
+CREATE TYPE "SaleStatus" AS ENUM ('DRAFT', 'COMPLETED', 'CANCELLED');
+
+-- AlterTable
+ALTER TABLE "Sale" ADD COLUMN "status" "SaleStatus" NOT NULL DEFAULT 'COMPLETED';
+ALTER TABLE "Sale" ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "Sale" ALTER COLUMN "paymentType" DROP NOT NULL;
+
+-- CreateIndex
+CREATE INDEX "Sale_status_idx" ON "Sale"("status");
