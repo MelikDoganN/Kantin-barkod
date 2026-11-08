@@ -82,6 +82,7 @@ void prisma
       console.log(`Kantin POS API http://localhost:${env.port} adresinde çalışıyor`)
 
       void checkScheduledBackup()
+      setInterval(() => void checkScheduledBackup(), 60_000).unref()
     })
   })
   .catch((error: unknown) => {

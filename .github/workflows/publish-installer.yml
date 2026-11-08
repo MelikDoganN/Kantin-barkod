@@ -39,5 +39,7 @@ jobs:
           fi
           gh run download "$BUILD_RUN_ID" --name KantinBarkodPOS-Setup-x64 --dir installer-artifact
           test -s installer-artifact/KantinBarkodPOS-Setup-x64.exe
+          notes_file=SQLITE-RELEASE.md
+          if [[ "$RELEASE_TAG" == "v3.0.0" ]]; then notes_file=RELEASE-v3.md; fi
           gh release create "$RELEASE_TAG" installer-artifact/KantinBarkodPOS-Setup-x64.exe \
-            --target "$build_sha" --title "Kantin Barkod POS $RELEASE_TAG" --notes-file SQLITE-RELEASE.md
+            --target "$build_sha" --title "Kantin Barkod POS $RELEASE_TAG" --notes-file "$notes_file"

@@ -38,6 +38,7 @@ import { formatShiftTime } from '@/services/shifts'
 import { useShift } from '@/context/ShiftContext'
 import type { BadgeTone, CartItem, Customer, Product } from '@/types'
 import { formatCurrency, cn } from '@/utils/format'
+import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
 import { useClock } from '@/hooks/useClock'
 
 type StockLevel = 'normal' | 'low' | 'critical'
@@ -103,11 +104,18 @@ export function SalesPage() {
   const [draftsLoading, setDraftsLoading] = useState(false)
   const [debtModalOpen, setDebtModalOpen] = useState(false)
   const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null)
+  const [scanning, setScanning] = useState(0)
   const [paying, setPaying] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [payError, setPayError] = useState<string | null>(null)
   const [lastDebt, setLastDebt] = useState<{ name: string; total: number } | null>(null)
 
+  const draftWritesRef = useRef(new Map<number, Promise<void>>())
+  const blockedRef = useRef(false)
+  blockedRef.current = paying || !!pendingPayment || debtModalOpen
+  const searchRef = useRef<HTMLInputElement>(null)
+  const scanQueueRef = useRef(Promise.resolve())
+  const draftBusyRef = useRef(false)
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSalesRef = useRef(pendingSales)
   const activeSaleIdRef = useRef(activeSaleId)
@@ -150,10 +158,17 @@ export function SalesPage() {
   }, [])
 
   const persistDraft = useCallback(async (id: number, nextCart: CartItem[], nextDiscount: number) => {
-    await updateDraftSale(id, {
-      items: cartToPayload(nextCart),
-      discount: nextDiscount > 0 ? nextDiscount : 0,
+    const previous = draftWritesRef.current.get(id) ?? Promise.resolve()
+    const write = previous.catch(() => undefined).then(async () => {
+      await updateDraftSale(id, {
+        items: cartToPayload(nextCart),
+        discount: nextDiscount > 0 ? nextDiscount : 0,
+      })
     })
+    draftWritesRef.current.set(id, write)
+    try { await write } finally {
+      if (draftWritesRef.current.get(id) === write) draftWritesRef.current.delete(id)
+    }
   }, [])
 
   const flushActiveDraft = useCallback(async () => {
@@ -183,14 +198,11 @@ export function SalesPage() {
     (updater: (sale: PendingSale) => PendingSale) => {
       const id = activeSaleIdRef.current
       if (!id) return
-      setPendingSales((prev) => {
-        const next = prev.map((sale) => (sale.id === id ? updater(sale) : sale))
-        const updated = next.find((sale) => sale.id === id)
-        if (updated) {
-          schedulePersist(updated.id, updated.cart, updated.discount)
-        }
-        return next
-      })
+      const next = pendingSalesRef.current.map((sale) => (sale.id === id ? updater(sale) : sale))
+      pendingSalesRef.current = next
+      setPendingSales(next)
+      const updated = next.find((sale) => sale.id === id)
+      if (updated) schedulePersist(updated.id, updated.cart, updated.discount)
     },
     [schedulePersist],
   )
@@ -224,6 +236,7 @@ export function SalesPage() {
       setPayError(null)
       try {
         let drafts = await fetchDraftSales()
+        if (cancelled) return
         if (drafts.length === 0) {
           drafts = [await createDraftSale()]
         }
@@ -254,9 +267,13 @@ export function SalesPage() {
 
   useEffect(() => {
     return () => {
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current)
+        const sale = pendingSalesRef.current.find((item) => item.id === activeSaleIdRef.current)
+        if (sale) void persistDraft(sale.id, sale.cart, sale.discount).catch(() => undefined)
+      }
     }
-  }, [])
+  }, [persistDraft])
 
   const availableProducts = useMemo(() => {
     return products.filter((product) => {
@@ -272,7 +289,7 @@ export function SalesPage() {
   }, [products, activeCategory, search])
 
   function addToCart(product: Product) {
-    if (!activeSaleId) return
+    if (!activeSaleIdRef.current || paying || pendingPayment || debtModalOpen) return
     setSuccessMsg(null)
     setPayError(null)
     setLastDebt(null)
@@ -298,36 +315,50 @@ export function SalesPage() {
     })
   }
 
-  async function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== 'Enter') return
-    const term = search.trim()
+  function scanBarcode(term: string, allowNameSearch = false) {
+    const saleId = activeSaleIdRef.current
+    if (!saleId || paying || pendingPayment || debtModalOpen) return
+    setScanning((count) => count + 1)
+    scanQueueRef.current = scanQueueRef.current.then(async () => {
+      try {
+        const product = await fetchProductByBarcode(term)
+        if (activeSaleIdRef.current !== saleId || blockedRef.current) return
+        addToCart(product)
+        setProducts((prev) => prev.some((p) => p.id === product.id)
+          ? prev.map((p) => p.id === product.id ? product : p) : [...prev, product])
+      } catch (err) {
+        if (activeSaleIdRef.current !== saleId || blockedRef.current) return
+        const match = allowNameSearch && err instanceof ApiError && err.status === 404
+          ? availableProducts.find((p) => p.name.toLowerCase().includes(term.toLowerCase())) : null
+        if (match) addToCart(match)
+        else setPayError(err instanceof ApiError ? err.message : 'Ürün bulunamadı.')
+      } finally {
+        setScanning((count) => count - 1)
+      }
+    })
+  }
+
+  useBarcodeScanner((barcode) => scanBarcode(barcode), Boolean(currentShift && activeSaleId && !draftsLoading))
+
+  useEffect(() => {
+    if (currentShift && activeSaleId && !draftsLoading && !pendingPayment && !debtModalOpen && !paying) {
+      searchRef.current?.focus()
+    }
+  }, [currentShift?.id, activeSaleId, draftsLoading, pendingPayment, debtModalOpen, paying])
+
+  function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    const tabBarcode = event.key === 'Tab' && /^\d{4,}$/.test(event.currentTarget.value.trim())
+    if (event.key !== 'Enter' && !tabBarcode) return
+    event.preventDefault()
+    event.stopPropagation()
+    const term = event.currentTarget.value.trim()
     if (!term) return
-
-    try {
-      const byBarcode = await fetchProductByBarcode(term)
-      addToCart(byBarcode)
-      setProducts((prev) => {
-        const exists = prev.some((p) => p.id === byBarcode.id)
-        return exists
-          ? prev.map((p) => (p.id === byBarcode.id ? byBarcode : p))
-          : [...prev, byBarcode]
-      })
-      setSearch('')
-      return
-    } catch {
-      // Barkod bulunamadıysa isim araması
-    }
-
-    const match = availableProducts.find((p) => p.name.toLowerCase().includes(term.toLowerCase()))
-    if (match) {
-      addToCart(match)
-      setSearch('')
-    } else {
-      setPayError('Ürün bulunamadı.')
-    }
+    setSearch('')
+    scanBarcode(term, !tabBarcode)
   }
 
   function updateQuantity(productId: string, delta: number) {
+    if (paying || pendingPayment || debtModalOpen) return
     patchActiveSale((sale) => ({
       ...sale,
       cart: sale.cart
@@ -345,6 +376,7 @@ export function SalesPage() {
   }
 
   function removeItem(productId: string) {
+    if (paying || pendingPayment || debtModalOpen) return
     patchActiveSale((sale) => ({
       ...sale,
       cart: sale.cart.filter((item) => item.product.id !== productId),
@@ -356,7 +388,7 @@ export function SalesPage() {
   }
 
   async function switchSale(saleId: number) {
-    if (saleId === activeSaleId || paying) return
+    if (saleId === activeSaleId || paying || scanning > 0) return
     // Sepetler lokalde korunur; API senkronu geçişi engellemesin.
     void flushActiveDraft().catch((err) => {
       setPayError(err instanceof ApiError ? err.message : 'Satış kaydedilemedi.')
@@ -370,7 +402,9 @@ export function SalesPage() {
   }
 
   async function handleNewSale() {
-    if (!currentShift || paying || draftsLoading) return
+    if (!currentShift || paying || scanning > 0 || draftsLoading || draftBusyRef.current) return
+    draftBusyRef.current = true
+    setPaying(true)
     try {
       void flushActiveDraft().catch(() => undefined)
       const draft = await createDraftSale()
@@ -388,16 +422,22 @@ export function SalesPage() {
       setPendingPayment(null)
     } catch (err) {
       setPayError(err instanceof ApiError ? err.message : 'Yeni satış açılamadı.')
+    } finally {
+      draftBusyRef.current = false
+      setPaying(false)
     }
   }
 
   async function handleCancelSale() {
-    if (!activeSaleId || paying) return
+    if (!activeSaleId || paying || scanning > 0 || draftBusyRef.current) return
+    draftBusyRef.current = true
+    setPaying(true)
     try {
       if (syncTimerRef.current) {
         clearTimeout(syncTimerRef.current)
         syncTimerRef.current = null
       }
+      await draftWritesRef.current.get(activeSaleId)?.catch(() => undefined)
       await cancelDraftSale(activeSaleId)
       const remaining = pendingSales.filter((sale) => sale.id !== activeSaleId)
       await ensureDraftAfterChange(remaining)
@@ -407,6 +447,9 @@ export function SalesPage() {
       setPendingPayment(null)
     } catch (err) {
       setPayError(err instanceof ApiError ? err.message : 'Satış iptal edilemedi.')
+    } finally {
+      draftBusyRef.current = false
+      setPaying(false)
     }
   }
 
@@ -479,7 +522,7 @@ export function SalesPage() {
     }
   }
 
-  const paymentDisabled = cart.length === 0 || paying || !currentShift || !activeSaleId
+  const paymentDisabled = cart.length === 0 || scanning > 0 || paying || !currentShift || !activeSaleId
 
   return (
     <div className="flex h-full gap-4 lg:gap-6">
@@ -514,12 +557,13 @@ export function SalesPage() {
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-500"
           />
           <input
+            ref={searchRef}
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => void handleSearchKeyDown(e)}
+            onKeyDown={handleSearchKeyDown}
             placeholder="Barkod okutun veya ürün arayın..."
-            disabled={!currentShift || draftsLoading || !activeSaleId}
+            disabled={!currentShift || draftsLoading || !activeSaleId || paying || !!pendingPayment || debtModalOpen}
             className="h-11 w-full rounded-card border border-slate-300 bg-white pl-11 pr-28 text-sm text-slate-800 shadow-card transition-colors placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-50 sm:text-base"
           />
           <span className="pointer-events-none absolute right-2.5 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 sm:text-xs">
@@ -585,7 +629,7 @@ export function SalesPage() {
                   <button
                     key={product.id}
                     onClick={() => addToCart(product)}
-                    disabled={!currentShift || draftsLoading || !activeSaleId}
+                    disabled={!currentShift || draftsLoading || !activeSaleId || paying || !!pendingPayment || debtModalOpen}
                     className="group flex flex-col overflow-hidden rounded-card border border-slate-200 bg-white text-center shadow-card transition-all hover:-translate-y-0.5 hover:border-[#F97316] hover:shadow-panel disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <div className="relative flex h-28 w-full items-center justify-center border-b border-slate-100 bg-slate-50 transition-colors group-hover:bg-brand-50/50">
@@ -847,10 +891,10 @@ export function SalesPage() {
               Satışı İptal Et
             </Button>
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" size="sm" icon={<Undo2 size={14} />}>
+              <Button variant="outline" size="sm" icon={<Undo2 size={14} />} disabled title="Satış iptali Gün Sonu ekranındaki satış detayından yapılır.">
                 İade
               </Button>
-              <Button variant="outline" size="sm" icon={<StickyNote size={14} />}>
+              <Button variant="outline" size="sm" icon={<StickyNote size={14} />} disabled title="Satışa not ekleme bu sürümde desteklenmiyor.">
                 Not Ekle
               </Button>
             </div>

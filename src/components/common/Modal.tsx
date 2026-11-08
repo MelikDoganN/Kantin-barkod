@@ -28,6 +28,9 @@ export function Modal({ open, title, description, onClose, children, footer, siz
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         className={cn(
           'flex max-h-[90vh] w-full flex-col rounded-card border border-slate-200 bg-white shadow-panel',
           sizeStyles[size],

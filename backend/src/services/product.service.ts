@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import { prisma } from '../config/database'
+import { prisma, type AppTransactionClient } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { buildImageUrl } from '../utils/product-image-url'
 import {
@@ -65,8 +65,8 @@ async function writeProductAudit(params: {
   entityLabel: string
   oldValues?: Prisma.InputJsonValue
   newValues?: Prisma.InputJsonValue
-}) {
-  await prisma.auditLog.create({
+}, database: Pick<AppTransactionClient, 'auditLog'> = prisma) {
+  await database.auditLog.create({
     data: {
       userId: params.userId,
       module: 'PRODUCT',
@@ -269,25 +269,15 @@ export async function deleteProduct(id: number, userId: number) {
   await prisma.$transaction(async (tx) => {
     await tx.inventory.deleteMany({ where: { productId: id } })
     await tx.product.delete({ where: { id } })
+    await writeProductAudit({
+      userId, actionType: 'DELETE_PRODUCT', title: 'Ürün silindi',
+      description: existing.name, entityId: id, entityLabel: existing.name,
+      oldValues: { name: existing.name, barcode: existing.barcode, categoryId: existing.categoryId },
+      newValues: { status: 'SUCCESS' },
+    }, tx)
   })
 
   deleteProductImageFile(existing.image)
-
-  await writeProductAudit({
-    userId,
-    actionType: 'DELETE_PRODUCT',
-    title: 'Ürün silindi',
-    description: existing.name,
-    entityId: id,
-    entityLabel: existing.name,
-    oldValues: {
-      name: existing.name,
-      barcode: existing.barcode,
-      categoryId: existing.categoryId,
-      status: 'SUCCESS',
-    },
-    newValues: { status: 'SUCCESS' },
-  })
 
   return { id }
 }

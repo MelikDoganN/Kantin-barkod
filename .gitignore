@@ -14,3 +14,6 @@ installer/vendor/**
 npm-debug.log*
 tsc-out.txt
 *.tsbuildinfo
+
+/test-results/
+/playwright-report/

@@ -26,7 +26,7 @@ export function ConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-md rounded-card border border-slate-200 bg-white shadow-panel">
+      <div role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-md rounded-card border border-slate-200 bg-white shadow-panel">
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">

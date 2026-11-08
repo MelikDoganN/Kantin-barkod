@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import { env } from './env'
 
 const moneyFields = new Set([
@@ -31,10 +31,14 @@ function toCents(value: number): number {
   return cents
 }
 
-function mapMoney(value: unknown, direction: 'store' | 'read', key?: string): unknown {
+const relations = new Map(Prisma.dmmf.datamodel.models.map((model) => [
+  model.name, new Map(model.fields.filter((field) => field.kind === 'object').map((field) => [field.name, field.type])),
+]))
+
+function mapMoney(value: unknown, direction: 'store' | 'read', model: string, key?: string): unknown {
   if (['oldValues', 'newValues', '_count'].includes(key ?? '')) return value
   if (value instanceof Date || Buffer.isBuffer(value)) return value
-  if (key && moneyFields.has(key)) {
+  if (key && moneyFields.has(key) && (key !== 'difference' || model === 'Shift')) {
     if (typeof value === 'number') return direction === 'store' ? toCents(value) : value / 100
     if (Array.isArray(value)) {
       return value.map((entry) =>
@@ -48,18 +52,18 @@ function mapMoney(value: unknown, direction: 'store' | 'read', key?: string): un
           operation,
           ['multiply', 'divide'].includes(operation)
             ? operand
-            : mapMoney(operand, direction, key),
+            : mapMoney(operand, direction, model, key),
         ]),
       )
     }
     return value
   }
-  if (Array.isArray(value)) return value.map((entry) => mapMoney(entry, direction))
+  if (Array.isArray(value)) return value.map((entry) => mapMoney(entry, direction, model))
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([childKey, child]) => [
         childKey,
-        mapMoney(child, direction, childKey),
+        mapMoney(child, direction, relations.get(model)?.get(childKey) ?? model, childKey),
       ]),
     )
   }
@@ -73,14 +77,14 @@ function createPrismaClient() {
   }).$extends({
     query: {
       $allModels: {
-        async $allOperations({ args, query, operation }) {
+        async $allOperations({ args, query, operation, model }) {
           const storedArgs = Object.fromEntries(
             Object.entries(args ?? {}).map(([key, value]) => [
-              key, ['data', 'create', 'update', 'where', 'having'].includes(key) ? mapMoney(value, 'store') : value,
+              key, ['data', 'create', 'update', 'where', 'having'].includes(key) ? mapMoney(value, 'store', model) : value,
             ]),
           ) as typeof args
           const result = await query(storedArgs)
-          return operation === 'count' ? result : mapMoney(result, 'read')
+          return operation === 'count' ? result : mapMoney(result, 'read', model)
         },
       },
     },

@@ -4,7 +4,7 @@
 ; Build: npm run dist:installer
 
 #define MyAppName "Kantin Barkod POS"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "3.0.0"
 #define MyAppPublisher "Kantin Barkod"
 #define MyAppExeName "Kantin Barkod POS.exe"
 #define MyAppId "com.kantinbarkod.sistemi"

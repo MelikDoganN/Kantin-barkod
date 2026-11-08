@@ -1,4 +1,5 @@
 import { beginDatabaseMaintenance, endDatabaseMaintenance } from '../middleware/databaseMaintenance'
+import { randomUUID } from 'node:crypto'
 import fs from 'fs'
 import path from 'path'
 import Database from 'better-sqlite3'
@@ -22,7 +23,7 @@ let restoreInProgress = false
 
 function formatBackupFileName(date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `kantin-pos-backup-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}.db`
+  return `kantin-pos-backup-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}-${randomUUID().slice(0, 8)}.db`
 }
 
 function sanitizeErrorMessage(raw: string): string {

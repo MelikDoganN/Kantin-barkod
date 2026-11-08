@@ -14,7 +14,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    electron([
+    ...(process.env.KANTIN_WEB_ONLY === '1' ? [] : [electron([
       {
         entry: 'electron/main.ts',
         onstart(args) {
@@ -38,6 +38,6 @@ export default defineConfig({
         },
       },
     ]),
-    renderer(),
+    renderer()]),
   ],
 })
