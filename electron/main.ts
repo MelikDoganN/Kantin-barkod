@@ -152,26 +152,31 @@ async function bootstrap() {
       const choice = await dialog.showMessageBox({
         type: 'error',
         title: 'Kantin Barkod POS',
-        message: 'PostgreSQL bağlantısı kurulamadı',
+        message: 'PostgreSQL bağlantısı veya veritabanı hazırlığı başarısız',
         detail:
           `${message}\n\n` +
-          'PostgreSQL 18 hizmetinin çalıştığını ve localhost:5432 üzerinde kantin_pos veritabanının ' +
-          'bulunduğunu; postgres kullanıcı şifresinin doğru olduğunu kontrol edin. Mevcut veritabanı değiştirilmedi.\n\n' +
-          `Log: ${path.join(app.getPath('userData'), 'logs', 'backend.log')}`,
-        buttons: isPackaged() ? ['Bağlantı bilgisini düzelt', 'Çıkış'] : ['Çıkış'],
+          'PostgreSQL 18 kurulu ve hizmeti çalışır durumda olmalıdır. Uygulama kantin_pos veritabanını yalnızca yoksa oluşturur; mevcut kayıtları silmez.\n\n' +
+          `Ayrıntılı log: ${path.join(app.getPath('userData'), 'logs', 'db-setup.log')}`,
+        buttons: isPackaged() ? ['Tekrar dene', 'Şifreyi değiştir', 'Çıkış'] : ['Çıkış'],
         defaultId: 0,
-        cancelId: isPackaged() ? 1 : 0,
+        cancelId: isPackaged() ? 2 : 0,
       })
-      if (!isPackaged() || choice.response !== 0 || !(await showDatabaseSetup())) {
+      if (!isPackaged() || choice.response === 2) {
         app.quit()
         return
       }
-      const credentials = loadDatabaseCredentials()
-      if (!credentials) {
-        app.quit()
-        return
+      if (choice.response === 1) {
+        if (!(await showDatabaseSetup())) {
+          app.quit()
+          return
+        }
+        const credentials = loadDatabaseCredentials()
+        if (!credentials) {
+          app.quit()
+          return
+        }
+        databaseUrl = toDatabaseUrl(credentials)
       }
-      databaseUrl = toDatabaseUrl(credentials)
     }
   }
 

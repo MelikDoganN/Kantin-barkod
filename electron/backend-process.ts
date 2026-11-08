@@ -21,6 +21,58 @@ function log(message: string): void {
   console.log(`[backend] ${message}`)
 }
 
+function logDatabaseSetup(message: string): void {
+  appendLog('db-setup.log', message)
+  // eslint-disable-next-line no-console
+  console.log(`[db-setup] ${message}`)
+}
+
+function prepareDatabase(databaseUrl: string, nodeBin: string, backendRoot: string): Promise<void> {
+  const setupScript = path.join(backendRoot, 'prisma', 'prepare-database.mjs')
+  if (!fs.existsSync(setupScript)) {
+    return Promise.reject(new Error(`Veritabanı kurulum bileşeni bulunamadı: ${setupScript}`))
+  }
+
+  logDatabaseSetup('Güvenli veritabanı hazırlama kontrolü başlıyor.')
+  return new Promise((resolve, reject) => {
+    const setupEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      NODE_ENV: 'production',
+    }
+    const child = spawn(nodeBin, [setupScript], {
+      cwd: backendRoot,
+      env: setupEnv,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let output = ''
+    const collect = (chunk: Buffer) => {
+      const text = chunk.toString('utf8')
+      output += text
+      for (const line of text.split(/\r?\n/).filter(Boolean)) logDatabaseSetup(line)
+    }
+    child.stdout?.on('data', collect)
+    child.stderr?.on('data', collect)
+    child.once('error', (error) => {
+      reject(new Error(`Veritabanı hazırlama başlatılamadı: ${error.message}`))
+    })
+    child.once('exit', (code, signal) => {
+      if (code === 0) {
+        resolve()
+      } else {
+        const detail = output.trim().split(/\r?\n/).slice(-12).join('\n')
+        reject(
+          new Error(
+            `Veritabanı hazırlama başarısız oldu (kod ${code ?? signal ?? 'bilinmiyor'}).` +
+              (detail ? `\n${detail}` : ''),
+          ),
+        )
+      }
+    })
+  })
+}
+
 /** Minimal .env parser (KEY=VALUE lines). */
 function parseEnvFile(filePath: string): Record<string, string> {
   const out: Record<string, string> = {}
@@ -114,6 +166,10 @@ export async function startBackendProcess(
   const userData = getUserDataPath()
   const backendRoot = getBackendRoot()
   const entry = getBackendEntry()
+
+  if (secureDatabaseUrl) {
+    await prepareDatabase(secureDatabaseUrl, resolveNodeBinary(), backendRoot)
+  }
 
   if (!secureDatabaseUrl && await isAlreadyHealthy(port)) {
     log(`API already healthy on port ${port} - spawn skipped`)

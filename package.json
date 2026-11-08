@@ -1,7 +1,7 @@
 {
   "name": "kantin-barkod",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Profesyonel kantin barkodlu satis ve stok yonetim POS uygulamasi",
   "author": "Kantin POS",
   "main": "dist-electron/main.js",
