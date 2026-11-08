@@ -1,11 +1,8 @@
 import {
-  CreditTransactionType,
-  PaymentType,
   Prisma,
-  SaleStatus,
-  StockMovementType,
 } from '@prisma/client'
-import { prisma } from '../config/database'
+import { CreditTransactionType, PaymentType, SaleStatus, StockMovementType } from '../types/enums'
+import { prisma, type AppTransactionClient } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { buildImageUrl } from '../utils/product-image-url'
 import { requireOpenShift } from './shift.service'
@@ -92,7 +89,7 @@ const draftSaleInclude = {
 } as const
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value.toFixed(2))
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 function toNumber(value: { toString(): string } | number): number {
@@ -139,7 +136,7 @@ function serializeDraftProduct(product: {
 }
 
 async function writeAuditLog(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   params: {
     userId: number
     actionType: string
@@ -184,7 +181,7 @@ function validateItemsInput(items: SaleItemInput[]) {
 }
 
 async function buildLineItems(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   items: SaleItemInput[],
   checkStock: boolean,
 ) {
@@ -224,9 +221,9 @@ async function buildLineItems(
       throw new AppError(`Yetersiz stok: ${product.name}`, 400)
     }
 
-    const unitPrice = toNumber(product.salePrice)
-    const totalPrice = unitPrice * quantity
-    subtotal += totalPrice
+    const unitPrice = decimal(toNumber(product.salePrice))
+    const totalPrice = decimal(unitPrice * quantity)
+    subtotal = decimal(subtotal + totalPrice)
 
     lineItems.push({
       productId,
@@ -245,7 +242,7 @@ async function buildLineItems(
 }
 
 async function applyCompletedSaleEffects(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   params: {
     saleId: number
     userId: number
@@ -337,8 +334,8 @@ async function applyCompletedSaleEffects(
 }
 
 function serializeSale<T extends {
-  status?: SaleStatus
-  paymentType?: PaymentType | null
+  status?: string
+  paymentType?: string | null
   subtotal: { toString(): string } | number
   discount: { toString(): string } | number
   total: { toString(): string } | number
@@ -379,8 +376,8 @@ function serializeSale<T extends {
 
 function serializeDraftSale<T extends {
   id: number
-  status: SaleStatus
-  paymentType: PaymentType | null
+  status: string
+  paymentType: string | null
   subtotal: { toString(): string } | number
   discount: { toString(): string } | number
   total: { toString(): string } | number
@@ -415,7 +412,7 @@ function serializeDraftSale<T extends {
   }
 }
 
-async function getOwnedDraftOrThrow(tx: Prisma.TransactionClient, saleId: number, userId: number) {
+async function getOwnedDraftOrThrow(tx: AppTransactionClient, saleId: number, userId: number) {
   const sale = await tx.sale.findUnique({
     where: { id: saleId },
     include: { items: true },
@@ -445,12 +442,12 @@ export async function createSale(input: CreateSaleInput, userId: number) {
     throw new AppError('Borç satışında müşteri seçimi zorunludur.', 400)
   }
 
-  const discount = Math.max(0, input.discount ?? 0)
+  const discount = Math.max(0, decimal(input.discount ?? 0))
 
   return prisma.$transaction(async (tx) => {
     const shift = await requireOpenShift(tx, userId)
     const { lineItems, subtotal } = await buildLineItems(tx, input.items, true)
-    const total = Math.max(subtotal - discount, 0)
+    const total = Math.max(decimal(subtotal - discount), 0)
 
     const sale = await tx.sale.create({
       data: {

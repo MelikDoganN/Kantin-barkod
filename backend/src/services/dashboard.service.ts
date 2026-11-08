@@ -1,4 +1,5 @@
-import { PaymentType, Prisma, SaleStatus, ShiftStatus } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import { PaymentType, SaleStatus, ShiftStatus } from '../types/enums'
 import { prisma } from '../config/database'
 import { buildImageUrl } from '../utils/product-image-url'
 
@@ -61,21 +62,21 @@ export async function getDashboard() {
       where: todayWhere,
       _sum: { total: true },
     }),
-    prisma.$queryRaw<Array<{ profit: Prisma.Decimal | number | null }>>`
-      SELECT COALESCE(SUM((si."unitPrice" - p."purchasePrice") * si.quantity), 0) AS profit
+    prisma.$queryRaw<Array<{ profit: number | null }>>`
+      SELECT COALESCE(SUM((si."unitPrice" - p."purchasePrice") * si.quantity) / 100.0, 0) AS profit
       FROM "SaleItem" si
       INNER JOIN "Sale" s ON s.id = si."saleId"
       INNER JOIN "Product" p ON p.id = si."productId"
       WHERE s."createdAt" >= ${start} AND s."createdAt" < ${end}
         AND s.status = 'COMPLETED'
     `,
-    prisma.$queryRaw<Array<{ hour: number; total: Prisma.Decimal | number }>>`
-      SELECT EXTRACT(HOUR FROM s."createdAt")::int AS hour,
-             COALESCE(SUM(s.total), 0) AS total
+    prisma.$queryRaw<Array<{ hour: number; total: number }>>`
+      SELECT CAST(strftime('%H', s."createdAt" / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hour,
+             COALESCE(SUM(s.total) / 100.0, 0) AS total
       FROM "Sale" s
       WHERE s."createdAt" >= ${start} AND s."createdAt" < ${end}
         AND s.status = 'COMPLETED'
-      GROUP BY EXTRACT(HOUR FROM s."createdAt")
+      GROUP BY strftime('%H', s."createdAt" / 1000, 'unixepoch', 'localtime')
       ORDER BY hour ASC
     `,
     prisma.$queryRaw<
@@ -84,14 +85,14 @@ export async function getDashboard() {
         product_name: string
         product_image: string | null
         quantity: bigint | number
-        revenue: Prisma.Decimal | number
+        revenue: number
       }>
     >`
       SELECT p.id AS product_id,
              p.name AS product_name,
              p.image AS product_image,
              COALESCE(SUM(si.quantity), 0) AS quantity,
-             COALESCE(SUM(si."totalPrice"), 0) AS revenue
+             COALESCE(SUM(si."totalPrice") / 100.0, 0) AS revenue
       FROM "SaleItem" si
       INNER JOIN "Sale" s ON s.id = si."saleId"
       INNER JOIN "Product" p ON p.id = si."productId"

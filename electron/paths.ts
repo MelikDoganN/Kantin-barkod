@@ -28,12 +28,21 @@ export function getBackupsDir(): string {
   return path.join(getUserDataPath(), 'backups')
 }
 
+export function getDatabaseDir(): string {
+  return path.join(getUserDataPath(), 'data')
+}
+
+export function getDatabaseFilePath(): string {
+  return path.join(getDatabaseDir(), 'kantin.db')
+}
+
 /** Ensure uploads / backups / logs / config under userData (never Program Files). */
 export function ensureUserDataDirs(): string {
   const root = getUserDataPath()
   for (const dir of [
     getUploadsDir(),
     getBackupsDir(),
+    getDatabaseDir(),
     getLogsDir(),
     getConfigDir(),
   ]) {

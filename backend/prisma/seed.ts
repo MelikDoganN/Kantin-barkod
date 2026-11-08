@@ -10,7 +10,8 @@
  *
  * Admin: admin / admin123 (argon2)
  */
-import { PrismaClient, UserRole, UserStatus } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
+import { UserRole, UserStatus } from '../src/types/enums'
 import { hashPassword, verifyPassword } from '../src/utils/password'
 
 const prisma = new PrismaClient()

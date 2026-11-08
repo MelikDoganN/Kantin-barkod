@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express'
 import { z } from 'zod'
-import { DayEndStatus } from '@prisma/client'
+import { DayEndStatus } from '../types/enums'
 import { AppError } from '../middleware/errorHandler'
 import { success } from '../utils/apiResponse'
 import * as dayEndService from '../services/dayEnd.service'

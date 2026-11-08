@@ -1,5 +1,3 @@
--- AlterTable
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastLoginAt" TIMESTAMP(3);
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "User_status_idx" ON "User"("status");
+-- Legacy migration marker retained for an ordered SQLite migration history.
+-- The SQLite baseline migration creates the schema; this placeholder is intentionally a no-op.
+SELECT 1;

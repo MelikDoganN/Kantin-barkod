@@ -1,9 +1,8 @@
-import { Prisma } from '@prisma/client'
 import { prisma } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value.toFixed(2))
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 function toNumber(value: { toString(): string } | number): number {

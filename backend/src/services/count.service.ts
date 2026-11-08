@@ -1,5 +1,6 @@
-import { Prisma, StockMovementType } from '@prisma/client'
-import { prisma } from '../config/database'
+import { Prisma } from '@prisma/client'
+import { StockMovementType } from '../types/enums'
+import { prisma, type AppTransactionClient } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { serializeProductBrief } from '../utils/product-image-url'
 
@@ -15,7 +16,7 @@ function itemStatus(difference: number | null | undefined): ItemDiffStatus | nul
 }
 
 async function writeAuditLog(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   params: {
     userId: number
     actionType: string

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express'
 import { z } from 'zod'
-import { ShiftStatus } from '@prisma/client'
+import { ShiftStatus } from '../types/enums'
 import { AppError } from '../middleware/errorHandler'
 import { success } from '../utils/apiResponse'
 import * as shiftService from '../services/shift.service'

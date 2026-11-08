@@ -1,4 +1,5 @@
-import { PaymentType, Prisma, SaleStatus, UserRole, UserStatus } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import { PaymentType, SaleStatus, UserRole, UserStatus } from '../types/enums'
 import { prisma } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { buildImageUrl } from '../utils/product-image-url'
@@ -69,8 +70,8 @@ export async function getSummary(startDate?: string, endDate?: string) {
       where,
       _sum: { total: true },
     }),
-    prisma.$queryRaw<Array<{ profit: Prisma.Decimal | number | null }>>`
-      SELECT COALESCE(SUM((si."unitPrice" - p."purchasePrice") * si.quantity), 0) AS profit
+    prisma.$queryRaw<Array<{ profit: number | null }>>`
+      SELECT COALESCE(SUM((si."unitPrice" - p."purchasePrice") * si.quantity) / 100.0, 0) AS profit
       FROM "SaleItem" si
       INNER JOIN "Sale" s ON s.id = si."saleId"
       INNER JOIN "Product" p ON p.id = si."productId"
@@ -110,26 +111,20 @@ export async function getSummary(startDate?: string, endDate?: string) {
 export async function getSalesTrend(startDate?: string, endDate?: string) {
   const { start, end } = parseDateRange(startDate, endDate)
 
-  const rows = await prisma.$queryRaw<Array<{ date: Date; total: Prisma.Decimal | number }>>`
-    SELECT DATE_TRUNC('day', s."createdAt") AS date,
-           COALESCE(SUM(s.total), 0) AS total
+  const rows = await prisma.$queryRaw<Array<{ date: string; total: number }>>`
+    SELECT strftime('%Y-%m-%d', s."createdAt" / 1000, 'unixepoch', 'localtime') AS date,
+           COALESCE(SUM(s.total) / 100.0, 0) AS total
     FROM "Sale" s
     WHERE s."createdAt" >= ${start} AND s."createdAt" < ${end}
       AND s.status = 'COMPLETED'
-    GROUP BY DATE_TRUNC('day', s."createdAt")
+    GROUP BY strftime('%Y-%m-%d', s."createdAt" / 1000, 'unixepoch', 'localtime')
     ORDER BY date ASC
   `
 
-  return rows.map((row) => {
-    const d = row.date instanceof Date ? row.date : new Date(row.date)
-    const yyyy = d.getFullYear()
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const dd = String(d.getDate()).padStart(2, '0')
-    return {
-      date: `${yyyy}-${mm}-${dd}`,
+  return rows.map((row) => ({
+      date: row.date,
       total: round2(toNumber(row.total)),
-    }
-  })
+    }))
 }
 
 export async function getPaymentSummary(startDate?: string, endDate?: string) {
@@ -148,7 +143,9 @@ export async function getPaymentSummary(startDate?: string, endDate?: string) {
   }
   for (const row of groups) {
     if (!row.paymentType) continue
-    byType[row.paymentType] = round2(toNumber(row._sum.total))
+    if (row.paymentType in byType) {
+      byType[row.paymentType as PaymentType] = round2(toNumber(row._sum.total))
+    }
   }
 
   const grand = byType.CASH + byType.CARD + byType.CREDIT
@@ -169,16 +166,16 @@ export async function getTopProducts(startDate?: string, endDate?: string) {
       product_name: string
       product_image: string | null
       quantity: bigint | number
-      revenue: Prisma.Decimal | number
-      profit: Prisma.Decimal | number
+      revenue: number
+      profit: number
     }>
   >`
     SELECT p.id AS product_id,
            p.name AS product_name,
            p.image AS product_image,
            COALESCE(SUM(si.quantity), 0) AS quantity,
-           COALESCE(SUM(si."totalPrice"), 0) AS revenue,
-           COALESCE(SUM((si."unitPrice" - p."purchasePrice") * si.quantity), 0) AS profit
+           COALESCE(SUM(si."totalPrice") / 100.0, 0) AS revenue,
+           COALESCE(SUM((si."unitPrice" - p."purchasePrice") * si.quantity) / 100.0, 0) AS profit
     FROM "SaleItem" si
     INNER JOIN "Sale" s ON s.id = si."saleId"
     INNER JOIN "Product" p ON p.id = si."productId"

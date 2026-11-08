@@ -1,4 +1,3 @@
--- CreateIndex
--- Product.image alanı zaten mevcut; uygulama katmanında imagePath olarak kullanılır.
--- Bu migration şema senkronunu belgelemek için oluşturuldu.
+-- Legacy migration marker retained for an ordered SQLite migration history.
+-- The SQLite baseline migration creates the schema; this placeholder is intentionally a no-op.
 SELECT 1;

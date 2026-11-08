@@ -4,7 +4,7 @@
 ; Build: npm run dist:installer
 
 #define MyAppName "Kantin Barkod POS"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "Kantin Barkod"
 #define MyAppExeName "Kantin Barkod POS.exe"
 #define MyAppId "com.kantinbarkod.sistemi"
@@ -37,7 +37,7 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
 WelcomeLabel1=Kantin Barkod POS Kurulumuna Hoş Geldiniz
-WelcomeLabel2=Bu sihirbaz Kantin Barkod POS uygulamasını bilgisayarınıza kuracaktır. PostgreSQL veritabanınıza dokunulmayacak veya veritabanı değiştirilmeden bırakılacaktır.%n%nİlk açılışta PostgreSQL bağlantı şifresi güvenli şekilde istenir.
+WelcomeLabel2=Bu sihirbaz Kantin Barkod POS uygulamasını bilgisayarınıza kuracaktır. Yerel SQLite veritabanı uygulama ilk açıldığında otomatik hazırlanır.%n%nUygulama internet bağlantısı veya ek bir veritabanı sunucusu gerektirmez.
 FinishedLabel=Kantin Barkod POS başarıyla kuruldu.
 ButtonNext=İleri >
 ButtonBack=< Geri

@@ -42,6 +42,17 @@ export async function download(req: Request, res: Response, next: NextFunction):
   }
 }
 
+export async function restore(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const id = String(req.params.id ?? '')
+    if (!id) throw new AppError('Geçersiz yedek kimliği.', 400)
+    const data = await backupService.restoreBackup(actorId(req), id)
+    success(res, data, 'Yedek güvenli şekilde geri yüklendi.')
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function remove(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const id = String(req.params.id ?? '')

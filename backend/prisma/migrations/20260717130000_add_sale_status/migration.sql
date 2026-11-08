@@ -1,10 +1,3 @@
--- CreateEnum
-CREATE TYPE "SaleStatus" AS ENUM ('DRAFT', 'COMPLETED', 'CANCELLED');
-
--- AlterTable
-ALTER TABLE "Sale" ADD COLUMN "status" "SaleStatus" NOT NULL DEFAULT 'COMPLETED';
-ALTER TABLE "Sale" ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
-ALTER TABLE "Sale" ALTER COLUMN "paymentType" DROP NOT NULL;
-
--- CreateIndex
-CREATE INDEX "Sale_status_idx" ON "Sale"("status");
+-- Legacy migration marker retained for an ordered SQLite migration history.
+-- The SQLite baseline migration creates the schema; this placeholder is intentionally a no-op.
+SELECT 1;

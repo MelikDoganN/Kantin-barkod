@@ -1,6 +1,6 @@
 # Kantin Barkod POS — Windows x64 Installer
 
-Inno Setup installs the Electron application and bundled Node.js/backend. The installer does not install PostgreSQL, reset databases, or overwrite existing records. On first application launch, the app checks PostgreSQL, creates `kantin_pos` only if it does not exist, and applies the repository's additive Prisma migrations. It adds the default admin/settings only when there are no users.
+Inno Setup installs the Electron application and bundled Node.js/backend. No separate database server or internet connection is required. The installer does not reset or overwrite existing SQLite records.
 
 ## Build on Windows x64
 
@@ -14,10 +14,10 @@ npm run dist:installer
 
 Output: `release/KantinBarkodPOS-Setup-x64.exe`. The GitHub Actions workflow at `.github/workflows/windows-installer.yml` runs the same build on `windows-latest` and publishes it as an artifact.
 
-## PostgreSQL first launch
+## Local SQLite database
 
-The app connects to `localhost:5432`, database `kantin_pos`, user `postgres`. On first launch, enter the existing PostgreSQL password once. Electron `safeStorage` protects it with the Windows account's DPAPI-backed encryption and saves it under `%APPDATA%\Kantin POS\config\db-credentials.bin`. The password is not embedded in the installer or written to `.env`.
+On first launch the app creates `%APPDATA%\Kantin POS\data\kantin.db`, enables SQLite foreign-key enforcement and WAL journaling, applies the bundled schema, then creates the default admin only when the user table is empty.
 
-Before serving the API, a setup helper checks the server and database, inspects migration history, and applies only pending project migrations. It refuses to modify non-empty databases that lack migration history. The seed script runs only when the user table is empty, and never invokes the destructive development seed. Errors and migration output are recorded in `%APPDATA%\Kantin POS\logs\db-setup.log`; PostgreSQL outages and invalid passwords are reported in Turkish.
+Before a later schema migration, the app creates a SQLite online-backup under `%APPDATA%\Kantin POS\backups` before applying changes. Existing database files with data but without migration history are not reset; setup stops and reports the issue. Migration and integrity errors are recorded in `%APPDATA%\Kantin POS\logs\db-setup.log`.
 
-User files, logs, backups, and the encrypted credential remain under `%APPDATA%\Kantin POS` when the app is uninstalled.
+User files, logs, backups, and the SQLite database remain under `%APPDATA%\Kantin POS` when the app is uninstalled or updated.

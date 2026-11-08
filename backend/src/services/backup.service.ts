@@ -1,9 +1,9 @@
-import { spawn } from 'child_process'
+import { beginDatabaseMaintenance, endDatabaseMaintenance } from '../middleware/databaseMaintenance'
 import fs from 'fs'
 import path from 'path'
+import Database from 'better-sqlite3'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../config/database'
-import { env } from '../config/env'
 import { AppError } from '../middleware/errorHandler'
 import {
   DEFAULT_BACKUPS_DIR,
@@ -18,59 +18,24 @@ import {
 } from './settings.service'
 
 let backupInProgress = false
-
-function parseDatabaseUrl(databaseUrl: string): {
-  host: string
-  port: string
-  user: string
-  password: string
-  database: string
-} {
-  let parsed: URL
-  try {
-    parsed = new URL(databaseUrl)
-  } catch {
-    throw new AppError('Veritabanı bağlantı ayarları geçersiz.', 500)
-  }
-
-  const database = parsed.pathname.replace(/^\//, '').split('?')[0]
-  if (!database) throw new AppError('Veritabanı adı çözümlenemedi.', 500)
-
-  return {
-    host: parsed.hostname || 'localhost',
-    port: parsed.port || '5432',
-    user: decodeURIComponent(parsed.username || 'postgres'),
-    password: decodeURIComponent(parsed.password || ''),
-    database,
-  }
-}
+let restoreInProgress = false
 
 function formatBackupFileName(date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `kantin-pos-backup-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}.sql`
-}
-
-function resolvePgDumpCommand(): string {
-  const configured = process.env.PG_DUMP_PATH?.trim()
-  if (configured) return configured
-  return process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump'
+  return `kantin-pos-backup-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}.db`
 }
 
 function sanitizeErrorMessage(raw: string): string {
   let message = raw.replace(/\s+/g, ' ').trim()
   if (!message) return 'Yedekleme sırasında bir hata oluştu.'
 
-  const sensitive = [env.databaseUrl, process.env.PGPASSWORD ?? '']
-  for (const secret of sensitive) {
-    if (secret && secret.length > 3) {
-      message = message.split(secret).join('[gizli]')
-    }
-  }
-  message = message.replace(/postgresql:\/\/[^\s]+/gi, '[gizli]')
   message = message.replace(/password[=:]\s*\S+/gi, 'password=[gizli]')
 
-  if (/not found|ENOENT|is not recognized|cannot find/i.test(message)) {
-    return 'PostgreSQL yedekleme aracı bulunamadı. PostgreSQL bin klasörünü kontrol edin.'
+  if (/SQLITE_BUSY|database is locked/i.test(message)) {
+    return 'Veritabanı şu anda yoğun kullanımda. Biraz bekleyip yeniden deneyin.'
+  }
+  if (/not found|ENOENT|cannot find/i.test(message)) {
+    return 'SQLite veritabanı veya yedekleme dosyasına erişilemiyor.'
   }
   if (/permission|EACCES|yazılamıyor|access is denied/i.test(message)) {
     return 'Seçilen yedekleme dizinine yazılamıyor.'
@@ -107,60 +72,20 @@ async function writeBackupAudit(params: {
   }
 }
 
-function runPgDump(args: {
-  host: string
-  port: string
-  user: string
-  password: string
-  database: string
-  filePath: string
-}): Promise<void> {
-  const command = resolvePgDumpCommand()
-  const cliArgs = [
-    '--host',
-    args.host,
-    '--port',
-    args.port,
-    '--username',
-    args.user,
-    '--dbname',
-    args.database,
-    '--format=p',
-    '--no-owner',
-    '--no-acl',
-    '--file',
-    args.filePath,
-  ]
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, cliArgs, {
-      env: {
-        ...process.env,
-        PGPASSWORD: args.password,
-      },
-      windowsHide: true,
-    })
-
-    let stderr = ''
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8')
-    })
-
-    child.on('error', (error) => {
-      reject(error)
-    })
-
-    child.on('close', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(stderr || `pg_dump exit code ${code}`))
-    })
-  })
+async function createSqliteBackup(sourcePath: string, destinationPath: string): Promise<void> {
+  if (!fs.existsSync(sourcePath)) throw new Error('SQLite veritabanı dosyası bulunamadı.')
+  const source = new Database(sourcePath, { readonly: true, fileMustExist: true })
+  try {
+    await source.backup(destinationPath)
+  } finally {
+    source.close()
+  }
 }
 
 function serializeBackup(row: {
   id: string
   fileName: string
-  fileSize: bigint | null
+  fileSize: number | null
   status: string
   errorMessage: string | null
   createdAt: Date
@@ -184,7 +109,7 @@ function serializeBackup(row: {
 }
 
 export async function createBackup(userId: number | null) {
-  if (backupInProgress) {
+  if (backupInProgress || restoreInProgress) {
     throw new AppError('Başka bir yedekleme işlemi devam ediyor.', 409)
   }
 
@@ -203,16 +128,9 @@ export async function createBackup(userId: number | null) {
     }
 
     filePath = path.join(backupDir, fileName)
-    const db = parseDatabaseUrl(env.databaseUrl)
-
-    await runPgDump({
-      host: db.host,
-      port: db.port,
-      user: db.user,
-      password: db.password,
-      database: db.database,
-      filePath,
-    })
+    const sourcePath = process.env.SQLITE_DATABASE_PATH?.trim()
+    if (!sourcePath) throw new Error('Yerel SQLite veritabanı yolu ayarlanmamış.')
+    await createSqliteBackup(sourcePath, filePath)
 
     if (!fs.existsSync(filePath)) {
       throw new Error('Yedek dosyası oluşturulamadı.')
@@ -224,7 +142,7 @@ export async function createBackup(userId: number | null) {
       data: {
         fileName,
         filePath,
-        fileSize: BigInt(stats.size),
+        fileSize: stats.size,
         status: 'SUCCESS',
         createdById: userId ?? undefined,
       },
@@ -366,6 +284,145 @@ export async function getBackupDownload(id: string) {
   }
 }
 
+export async function restoreBackup(userId: number, id: string) {
+  if (restoreInProgress || backupInProgress) {
+    throw new AppError('Başka bir yedekleme veya geri yükleme işlemi devam ediyor.', 409)
+  }
+  beginDatabaseMaintenance()
+  restoreInProgress = true
+
+  let record: Awaited<ReturnType<typeof prisma.backupRecord.findUnique>>
+  let backupPath = ''
+  let databasePath = ''
+  try {
+    record = await prisma.backupRecord.findUnique({ where: { id } })
+    if (!record || record.status !== 'SUCCESS') {
+      throw new AppError('Geri yüklenecek geçerli bir yedek bulunamadı.', 404)
+    }
+
+    const settingsDir = await getBackupDirectorySetting()
+    const allowedRoots = [settingsDir, DEFAULT_BACKUPS_DIR]
+    backupPath = path.resolve(record.filePath)
+    if (!allowedRoots.some((root) => isPathInside(root, backupPath)) || !fs.existsSync(backupPath)) {
+      throw new AppError('Yedek dosyası bulunamadı veya yolu geçersiz.', 400)
+    }
+
+    databasePath = process.env.SQLITE_DATABASE_PATH?.trim() ?? ''
+    if (!databasePath || path.resolve(backupPath) === path.resolve(databasePath)) {
+      throw new AppError('Geri yükleme için geçerli bir yerel SQLite veritabanı gerekli.', 500)
+    }
+  } catch (error) {
+    restoreInProgress = false
+    endDatabaseMaintenance()
+    throw error
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const safetyName = `kantin-pos-pre-restore-${stamp}.db`
+  const safetyPath = path.join(DEFAULT_BACKUPS_DIR, safetyName)
+  const stagedPath = path.join(path.dirname(databasePath), `.kantin-restore-${stamp}.db`)
+  const displacedPath = path.join(path.dirname(databasePath), `.kantin-before-restore-${stamp}.db`)
+  let displaced = false
+
+  try {
+    ensureDir(DEFAULT_BACKUPS_DIR)
+    const source = new Database(backupPath, { readonly: true, fileMustExist: true })
+    try {
+      const integrity = source.pragma('quick_check') as Array<{ quick_check: string }>
+      const tables = (source
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('User','Product','Sale','_prisma_migrations')")
+        .all() as Array<{ name: string }>)
+        .map((row) => row.name)
+      if (integrity[0]?.quick_check !== 'ok' || !['User', 'Product', 'Sale', '_prisma_migrations'].every((name) => tables.includes(name))) {
+        throw new AppError('Yedek bozuk veya Kantin Barkod POS veritabanı değil.', 400)
+      }
+    } finally {
+      source.close()
+    }
+
+    const current = new Database(databasePath, { readonly: true, fileMustExist: true })
+    try {
+      const candidate = new Database(backupPath, { readonly: true, fileMustExist: true })
+      try {
+        const history = (db: Database.Database) => db.prepare('SELECT migration_name, checksum FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name').all()
+        if (JSON.stringify(history(candidate)) !== JSON.stringify(history(current))) {
+          throw new AppError('Yedek farklı bir veritabanı sürümüne ait. Mevcut veritabanı değiştirilmedi.', 400)
+        }
+      } finally { candidate.close() }
+      await current.backup(safetyPath)
+    } finally {
+      current.close()
+    }
+    if (!fs.existsSync(safetyPath) || fs.statSync(safetyPath).size === 0) {
+      throw new AppError('Geri yükleme öncesi güvenlik yedeği oluşturulamadı. Mevcut veritabanı değiştirilmedi.', 500)
+    }
+
+    const stagedSource = new Database(backupPath, { readonly: true, fileMustExist: true })
+    try {
+      await stagedSource.backup(stagedPath)
+    } finally {
+      stagedSource.close()
+    }
+
+    await prisma.$disconnect()
+    for (const suffix of ['-wal', '-shm']) {
+      const sidecar = `${databasePath}${suffix}`
+      if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+    }
+    fs.renameSync(databasePath, displacedPath)
+    displaced = true
+    fs.renameSync(stagedPath, databasePath)
+
+    const restored = new Database(databasePath)
+    try {
+      restored.pragma('foreign_keys = ON')
+      restored.pragma('journal_mode = WAL')
+      const integrity = restored.pragma('quick_check') as Array<{ quick_check: string }>
+      if (integrity[0]?.quick_check !== 'ok') throw new Error('Geri yüklenen veritabanı bütünlük kontrolünden geçemedi.')
+      const violations = restored.pragma('foreign_key_check') as unknown[]
+      if (violations.length) throw new Error('Geri yüklenen veritabanında ilişki bütünlüğü ihlali var.')
+    } finally {
+      restored.close()
+    }
+
+    const safetyStats = fs.statSync(safetyPath)
+    const safetyRecord = await prisma.backupRecord.create({
+      data: {
+        fileName: safetyName,
+        filePath: safetyPath,
+        fileSize: safetyStats.size,
+        status: 'SUCCESS',
+        createdById: (await prisma.user.findUnique({ where: { id: userId } })) ? userId : null,
+      },
+    })
+    await prisma.$connect()
+    fs.unlinkSync(displacedPath)
+    displaced = false
+    return {
+      restoredBackup: { id: record.id, fileName: record.fileName },
+      safetyBackup: { id: safetyRecord.id, fileName: safetyName, fileSize: safetyStats.size },
+    }
+  } catch (error) {
+    if (displaced && fs.existsSync(displacedPath)) {
+      await prisma.$disconnect()
+      for (const suffix of ['-wal', '-shm']) {
+        if (fs.existsSync(`${databasePath}${suffix}`)) fs.unlinkSync(`${databasePath}${suffix}`)
+      }
+      if (fs.existsSync(databasePath)) fs.unlinkSync(databasePath)
+      fs.renameSync(displacedPath, databasePath)
+    }
+    await prisma.$connect().catch(() => undefined)
+    if (error instanceof AppError) throw error
+    throw new AppError(`Yedekten geri yükleme başarısız oldu; geri alma denendi. ${sanitizeErrorMessage(error instanceof Error ? error.message : String(error))}`, 500)
+  } finally {
+    restoreInProgress = false
+    endDatabaseMaintenance()
+    for (const file of [stagedPath]) {
+      if (fs.existsSync(file)) safeUnlink(file, [path.dirname(databasePath)])
+    }
+  }
+}
+
 export async function deleteBackup(userId: number, id: string) {
   const record = await prisma.backupRecord.findUnique({ where: { id } })
   if (!record) throw new AppError('Yedek kaydı bulunamadı.', 404)
@@ -399,7 +456,7 @@ function isDue(lastBackupAt: Date | null, frequency: string): boolean {
 }
 
 export async function checkScheduledBackup(): Promise<void> {
-  if (backupInProgress) return
+  if (backupInProgress || restoreInProgress) return
 
   try {
     const config = await getAutoBackupConfig()

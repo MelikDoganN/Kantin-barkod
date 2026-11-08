@@ -1,4 +1,5 @@
-import { Prisma, StockMovementType, UserRole, UserStatus } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import { StockMovementType, UserRole, UserStatus } from '../types/enums'
 import { prisma } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { buildImageUrl } from '../utils/product-image-url'
@@ -15,7 +16,7 @@ function round2(n: number): number {
 }
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value.toFixed(2))
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 function todayRange() {

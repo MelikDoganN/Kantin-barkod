@@ -21,7 +21,12 @@ export interface ProductInput {
 }
 
 function decimalToNumber(value: { toString(): string } | number): number {
-  return typeof value === 'number' ? value : Number(value.toString())
+  const amount = typeof value === 'number' ? value : Number(value.toString())
+  return Math.round((amount + Number.EPSILON) * 100) / 100
+}
+
+function money(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 function serializeProduct<T extends {
@@ -158,8 +163,8 @@ export async function createProduct(input: ProductInput) {
       name: input.name.trim(),
       barcode,
       categoryId: input.categoryId,
-      purchasePrice: input.purchasePrice,
-      salePrice: input.salePrice,
+      purchasePrice: money(input.purchasePrice),
+      salePrice: money(input.salePrice),
       unitType: input.unitType ?? 'unit',
       unitsPerCarton: input.unitsPerCarton ?? 1,
       minimumStock: input.minimumStock ?? 0,
@@ -198,8 +203,8 @@ export async function updateProduct(id: number, input: ProductInput) {
       name: input.name.trim(),
       barcode,
       categoryId: input.categoryId,
-      purchasePrice: input.purchasePrice,
-      salePrice: input.salePrice,
+      purchasePrice: money(input.purchasePrice),
+      salePrice: money(input.salePrice),
       unitType: input.unitType ?? existing.unitType,
       unitsPerCarton: input.unitsPerCarton ?? existing.unitsPerCarton,
       minimumStock: input.minimumStock ?? existing.minimumStock,

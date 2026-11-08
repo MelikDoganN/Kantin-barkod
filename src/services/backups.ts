@@ -47,6 +47,13 @@ export function downloadBackup(id: string, fileName: string) {
   return downloadAuthenticated(`/backups/${id}/download`, fileName)
 }
 
+export function restoreBackup(id: string) {
+  return api.post<{
+    restoredBackup: { id: string; fileName: string }
+    safetyBackup: { id: string; fileName: string; fileSize: number }
+  }>(`/backups/${id}/restore`)
+}
+
 export function deleteBackup(id: string) {
   return api.delete<{ id: string }>(`/backups/${id}`)
 }

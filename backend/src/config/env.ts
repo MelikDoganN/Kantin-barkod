@@ -51,7 +51,7 @@ function loadEnvFiles(): void {
   // eslint-disable-next-line no-console
   console.log(
     `[env] loadedFrom=${loadedFrom.length ? loadedFrom.join(' | ') : '(none)'} ` +
-      `DATABASE_URL=${process.env.DATABASE_URL ? 'set' : 'MISSING'} ` +
+      `DATABASE_URL=${process.env.DATABASE_URL ? 'set' : 'SQLite default'} ` +
       `cwd=${process.cwd()}`,
   )
 }
@@ -67,15 +67,13 @@ interface AppEnv {
 
 export const env: AppEnv = {
   port: Number(process.env.PORT) || 3001,
-  databaseUrl: process.env.DATABASE_URL ?? '',
+  databaseUrl: process.env.DATABASE_URL ?? 'file:./dev.db',
   jwtSecret: process.env.JWT_SECRET ?? '',
   nodeEnv: process.env.NODE_ENV ?? 'development',
 }
 
-if (!env.databaseUrl) {
-  // eslint-disable-next-line no-console
-  console.error(
-    '[env] DATABASE_URL is missing. Checked DOTENV_CONFIG_PATH, ELECTRON_USER_DATA_PATH/config/.env, ' +
-      '%APPDATA%/Kantin POS/config/.env, cwd/.env, and backend/.env',
-  )
+// Packaged Electron always injects the persistent AppData SQLite file URL.
+process.env.DATABASE_URL ??= env.databaseUrl
+if (!env.databaseUrl.startsWith('file:')) {
+  throw new Error('Bu sürüm yerel SQLite kullanır. Eski PostgreSQL ayarını kaldırın; eski veriler değiştirilmedi.')
 }

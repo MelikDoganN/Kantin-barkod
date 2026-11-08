@@ -1,10 +1,8 @@
 import {
   Prisma,
-  ShiftStatus,
-  UserRole,
-  UserStatus,
 } from '@prisma/client'
-import { prisma } from '../config/database'
+import { ShiftStatus, UserRole, UserStatus } from '../types/enums'
+import { prisma, type AppTransactionClient } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { hashPassword, verifyPassword } from '../utils/password'
 
@@ -18,7 +16,7 @@ function round2(n: number): number {
 }
 
 async function writeUserAudit(
-  tx: Prisma.TransactionClient | typeof prisma,
+  tx: AppTransactionClient | typeof prisma,
   params: {
     actorId: number
     actionType: string
@@ -47,7 +45,7 @@ async function writeUserAudit(
   })
 }
 
-async function countActiveAdmins(tx: Prisma.TransactionClient | typeof prisma = prisma) {
+async function countActiveAdmins(tx: AppTransactionClient | typeof prisma = prisma) {
   return tx.user.count({
     where: { role: UserRole.ADMIN, status: UserStatus.ACTIVE },
   })
@@ -58,12 +56,12 @@ function publicUser(user: {
   fullName: string
   username: string
   phone: string | null
-  role: UserRole
-  status: UserStatus
+  role: string
+  status: string
   lastLoginAt: Date | null
   createdAt: Date
   updatedAt: Date
-  shifts?: Array<{ id: number; startTime: Date; status: ShiftStatus }>
+  shifts?: Array<{ id: number; startTime: Date; status: string }>
 }) {
   const openShift = user.shifts?.[0] ?? null
   return {
@@ -112,9 +110,9 @@ export async function listUsers(filters: {
   if (filters.search?.trim()) {
     const q = filters.search.trim()
     where.OR = [
-      { fullName: { contains: q, mode: 'insensitive' } },
-      { username: { contains: q, mode: 'insensitive' } },
-      { phone: { contains: q, mode: 'insensitive' } },
+        { fullName: { contains: q } },
+        { username: { contains: q } },
+        { phone: { contains: q } },
     ]
   }
 

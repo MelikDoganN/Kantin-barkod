@@ -1,14 +1,20 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import http from 'node:http'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   appendLog,
+  getBackupsDir,
   getBackendEntry,
   getBackendPort,
   getBackendRoot,
   getConfigDir,
+  getDatabaseFilePath,
+  getDatabaseDir,
   getUserDataPath,
+  isPackaged,
   resolveNodeBinary,
 } from './paths'
 
@@ -27,7 +33,12 @@ function logDatabaseSetup(message: string): void {
   console.log(`[db-setup] ${message}`)
 }
 
-function prepareDatabase(databaseUrl: string, nodeBin: string, backendRoot: string): Promise<void> {
+function prepareDatabase(
+  databaseUrl: string,
+  databaseFile: string,
+  nodeBin: string,
+  backendRoot: string,
+): Promise<void> {
   const setupScript = path.join(backendRoot, 'prisma', 'prepare-database.mjs')
   if (!fs.existsSync(setupScript)) {
     return Promise.reject(new Error(`Veritabanı kurulum bileşeni bulunamadı: ${setupScript}`))
@@ -38,6 +49,8 @@ function prepareDatabase(databaseUrl: string, nodeBin: string, backendRoot: stri
     const setupEnv: NodeJS.ProcessEnv = {
       ...process.env,
       DATABASE_URL: databaseUrl,
+      SQLITE_DATABASE_PATH: databaseFile,
+      SQLITE_BACKUP_DIR: getBackupsDir(),
       NODE_ENV: 'production',
     }
     const child = spawn(nodeBin, [setupScript], {
@@ -160,18 +173,13 @@ async function isAlreadyHealthy(port: number): Promise<boolean> {
  * Skips spawn when an API is already listening on the port (e.g. `npm run dev` in backend).
  */
 export async function startBackendProcess(
-  secureDatabaseUrl?: string,
 ): Promise<{ port: number; spawned: boolean }> {
   const port = getBackendPort()
   const userData = getUserDataPath()
   const backendRoot = getBackendRoot()
   const entry = getBackendEntry()
 
-  if (secureDatabaseUrl) {
-    await prepareDatabase(secureDatabaseUrl, resolveNodeBinary(), backendRoot)
-  }
-
-  if (!secureDatabaseUrl && await isAlreadyHealthy(port)) {
+  if (!isPackaged() && await isAlreadyHealthy(port)) {
     log(`API already healthy on port ${port} - spawn skipped`)
     return { port, spawned: false }
   }
@@ -184,6 +192,9 @@ export async function startBackendProcess(
 
   const nodeBin = resolveNodeBinary()
   const envCandidates = resolveEnvFilePaths(backendRoot)
+  const databaseFile = getDatabaseFilePath()
+  fs.mkdirSync(getDatabaseDir(), { recursive: true })
+  const databaseUrl = pathToFileURL(databaseFile).href
 
   log(`userData=${userData}`)
   log(`backendRoot=${backendRoot}`)
@@ -196,6 +207,9 @@ export async function startBackendProcess(
     NODE_ENV: process.env.NODE_ENV === 'development' ? 'development' : 'production',
     PORT: String(port),
     ELECTRON_USER_DATA_PATH: userData,
+    DATABASE_URL: databaseUrl,
+    SQLITE_DATABASE_PATH: databaseFile,
+    SQLITE_BACKUP_DIR: getBackupsDir(),
   }
 
   // Load first existing .env into child process env (Prisma needs process.env.DATABASE_URL)
@@ -208,10 +222,6 @@ export async function startBackendProcess(
         env[key] = value
       }
     }
-    // Local development may still use .env. Packaged credentials are injected below.
-    if (!secureDatabaseUrl && parsed.DATABASE_URL) {
-      env.DATABASE_URL = parsed.DATABASE_URL
-    }
     if (parsed.JWT_SECRET) {
       env.JWT_SECRET = parsed.JWT_SECRET
     }
@@ -220,19 +230,22 @@ export async function startBackendProcess(
     break
   }
 
-  if (secureDatabaseUrl) {
-    env.DATABASE_URL = secureDatabaseUrl
+  if (!env.JWT_SECRET) {
+    const configDir = getConfigDir()
+    fs.mkdirSync(configDir, { recursive: true })
+    const secretFile = path.join(configDir, 'jwt-secret')
+    if (!fs.existsSync(secretFile)) {
+      fs.writeFileSync(secretFile, crypto.randomBytes(48).toString('hex'), { mode: 0o600 })
+    }
+    env.JWT_SECRET = fs.readFileSync(secretFile, 'utf8').trim()
   }
 
   log(`env file used: ${loadedEnvPath ?? '(none)'}`)
   log(`DATABASE_URL in spawn env: ${env.DATABASE_URL ? 'set' : 'MISSING'}`)
 
-  if (!env.DATABASE_URL) {
-    throw new Error(
-      `DATABASE_URL not found. Expected installer config at:\n` +
-        envCandidates.map((p) => ` - ${p}`).join('\n'),
-    )
-  }
+  env.DATABASE_URL = databaseUrl
+  logDatabaseSetup(`SQLite database=${databaseFile}`)
+  await prepareDatabase(databaseUrl, databaseFile, nodeBin, backendRoot)
 
   log(`Starting: ${nodeBin} ${entry}`)
   log(`cwd=${backendRoot}`)

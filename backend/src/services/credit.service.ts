@@ -1,10 +1,8 @@
 import {
-  CreditTransactionType,
-  PaymentType,
   Prisma,
-  SaleStatus,
 } from '@prisma/client'
-import { prisma } from '../config/database'
+import { CreditTransactionType, PaymentType, SaleStatus } from '../types/enums'
+import { prisma, type AppTransactionClient } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { buildImageUrl } from '../utils/product-image-url'
 
@@ -14,7 +12,7 @@ function toNumber(value: { toString(): string } | number | null | undefined): nu
 }
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value.toFixed(2))
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 function round2(n: number): number {
@@ -30,7 +28,7 @@ function todayRange(): { start: Date; end: Date } {
 }
 
 async function writeAuditLog(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   params: {
     userId: number
     actionType: string
@@ -68,8 +66,8 @@ export async function listCreditCustomers(search?: string) {
     where: query
       ? {
           OR: [
-            { name: { contains: query, mode: 'insensitive' } },
-            { phone: { contains: query, mode: 'insensitive' } },
+            { name: { contains: query } },
+            { phone: { contains: query } },
           ],
         }
       : undefined,

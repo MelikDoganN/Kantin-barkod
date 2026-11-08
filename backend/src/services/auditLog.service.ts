@@ -165,16 +165,16 @@ function buildWhere(filters: {
     if (status === 'failed') {
       and.push({
         OR: [
-          { actionType: { contains: 'FAILED', mode: 'insensitive' } },
-          { actionType: { equals: 'FAIL', mode: 'insensitive' } },
+          { actionType: { contains: 'FAILED' } },
+          { actionType: { equals: 'FAIL' } },
         ],
       })
     } else if (status === 'success') {
       and.push({
         NOT: {
           OR: [
-            { actionType: { contains: 'FAILED', mode: 'insensitive' } },
-            { actionType: { equals: 'FAIL', mode: 'insensitive' } },
+            { actionType: { contains: 'FAILED' } },
+            { actionType: { equals: 'FAIL' } },
           ],
         },
       })
@@ -187,11 +187,11 @@ function buildWhere(filters: {
     const q = filters.search.trim()
     and.push({
       OR: [
-        { title: { contains: q, mode: 'insensitive' } },
-        { description: { contains: q, mode: 'insensitive' } },
-        { entityLabel: { contains: q, mode: 'insensitive' } },
-        { user: { username: { contains: q, mode: 'insensitive' } } },
-        { user: { fullName: { contains: q, mode: 'insensitive' } } },
+        { title: { contains: q } },
+        { description: { contains: q } },
+        { entityLabel: { contains: q } },
+        { user: { username: { contains: q } } },
+        { user: { fullName: { contains: q } } },
       ],
     })
   }
@@ -275,8 +275,8 @@ export async function getAuditSummary(date?: string) {
       where: {
         createdAt: { gte: day.start, lte: day.end },
         OR: [
-          { actionType: { contains: 'FAILED', mode: 'insensitive' } },
-          { actionType: { contains: 'FAIL', mode: 'insensitive' } },
+          { actionType: { contains: 'FAILED' } },
+          { actionType: { contains: 'FAIL' } },
         ],
       },
     }),

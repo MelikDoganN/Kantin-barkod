@@ -1,2 +1,3 @@
--- AlterTable
-ALTER TABLE "StockCount" ADD COLUMN IF NOT EXISTS "completedAt" TIMESTAMP(3);
+-- Legacy migration marker retained for an ordered SQLite migration history.
+-- The SQLite baseline migration creates the schema; this placeholder is intentionally a no-op.
+SELECT 1;

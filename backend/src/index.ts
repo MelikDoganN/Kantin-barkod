@@ -32,6 +32,8 @@ import settingsRoutes from './routes/settings.routes'
 import backupRoutes from './routes/backup.routes'
 import cashAdjustmentRoutes from './routes/cashAdjustment.routes'
 
+import { databaseMaintenance } from './middleware/databaseMaintenance'
+
 const app = express()
 
 ensureDir(UPLOADS_DIR)
@@ -41,6 +43,7 @@ ensureDir(DEFAULT_BACKUPS_DIR)
 ensureDir(LOGS_DIR)
 ensureDir(CONFIG_DIR)
 
+app.use(databaseMaintenance)
 app.use(cors())
 app.use(express.json())
 app.use('/uploads', express.static(UPLOADS_DIR))
@@ -74,7 +77,7 @@ app.use(errorHandler)
 void prisma
   .$connect()
   .then(() => {
-    app.listen(env.port, () => {
+    app.listen(env.port, '127.0.0.1', () => {
       // eslint-disable-next-line no-console
       console.log(`Kantin POS API http://localhost:${env.port} adresinde çalışıyor`)
 
@@ -88,8 +91,6 @@ void prisma
         : 'unknown'
     // Do not log Prisma's raw error: it can include connection details.
     // eslint-disable-next-line no-console
-    console.error(
-      `[database] PostgreSQL connection failed (code=${code}). Check the service, database, and credentials.`,
-    )
+    console.error(`[database] SQLite bağlantısı başarısız (kod=${code}). Veritabanı dosyası ve izinlerini kontrol edin.`)
     process.exit(1)
   })

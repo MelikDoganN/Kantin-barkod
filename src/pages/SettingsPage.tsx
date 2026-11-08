@@ -38,6 +38,7 @@ import {
   downloadBackup,
   fetchBackups,
   formatBytes,
+  restoreBackup,
   type BackupItem,
 } from '@/services/backups'
 import { fetchCategories, type ApiCategory } from '@/services/catalog'
@@ -114,8 +115,10 @@ export function SettingsPage() {
   const [autoBackupFrequency, setAutoBackupFrequency] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY' | ''>('')
   const [backupSaving, setBackupSaving] = useState(false)
   const [backupCreating, setBackupCreating] = useState(false)
+  const [backupRestoring, setBackupRestoring] = useState(false)
   const [backups, setBackups] = useState<BackupItem[]>([])
   const [deleteTarget, setDeleteTarget] = useState<BackupItem | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<BackupItem | null>(null)
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -242,17 +245,27 @@ export function SettingsPage() {
         render: (row) => (
           <div className="flex gap-1">
             {row.status === 'SUCCESS' && (
-              <Button
-                variant="outline"
-                icon={<Download size={14} />}
-                onClick={() => {
-                  void downloadBackup(row.id, row.fileName).catch((err) => {
-                    setErrorToast(err instanceof ApiError ? err.message : 'İndirilemedi.')
-                  })
-                }}
-              >
-                İndir
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  icon={<Download size={14} />}
+                  onClick={() => {
+                    void downloadBackup(row.id, row.fileName).catch((err) => {
+                      setErrorToast(err instanceof ApiError ? err.message : 'İndirilemedi.')
+                    })
+                  }}
+                >
+                  İndir
+                </Button>
+                <Button
+                  variant="outline"
+                  icon={<RotateCcw size={14} />}
+                  disabled={backupRestoring}
+                  onClick={() => setRestoreTarget(row)}
+                >
+                  Geri yükle
+                </Button>
+              </>
             )}
             <Button
               variant="outline"
@@ -743,11 +756,8 @@ export function SettingsPage() {
               >
                 {backupCreating ? 'Yedekleniyor…' : 'Şimdi Yedekle'}
               </Button>
-              <Button variant="outline" icon={<RotateCcw size={16} />} disabled title="Pasif">
-                Yedeği Geri Yükle
-              </Button>
               <p className="w-full text-xs text-slate-500">
-                Güvenlik nedeniyle geri yükleme işlemi masaüstü bakım modunda yapılacaktır.
+                Geri yükleme öncesi mevcut veritabanının güvenlik yedeği otomatik alınır.
               </p>
             </div>
 
@@ -886,6 +896,39 @@ export function SettingsPage() {
               setToast('Yedek silindi.')
             } catch (err) {
               setErrorToast(err instanceof ApiError ? err.message : 'Yedek silinemedi.')
+            }
+          })()
+        }}
+      />
+      <ConfirmModal
+        open={!!restoreTarget}
+        title="Veritabanını Geri Yükle"
+        message={
+          restoreTarget
+            ? `“${restoreTarget.fileName}” yedeği yerel veritabanının yerine geri yüklenecek. Mevcut veritabanı için otomatik güvenlik yedeği alınır. Bu yedekten sonra eklenen kayıtlar geri yüklenen veritabanında görünmez.`
+            : ''
+        }
+        confirmLabel={backupRestoring ? 'Geri yükleniyor…' : 'Geri Yükle'}
+        tone="danger"
+        onCancel={() => {
+          if (!backupRestoring) setRestoreTarget(null)
+        }}
+        onConfirm={() => {
+          if (!restoreTarget || backupRestoring) return
+          const id = restoreTarget.id
+          setBackupRestoring(true)
+          setErrorToast(null)
+          void (async () => {
+            try {
+              const result = await restoreBackup(id)
+              setRestoreTarget(null)
+              await refreshBackups()
+              setToast(`Geri yüklendi. Güvenlik yedeği: ${result.safetyBackup.fileName}`)
+              window.setTimeout(() => window.location.reload(), 700)
+            } catch (err) {
+              setErrorToast(err instanceof ApiError ? err.message : 'Yedek geri yüklenemedi.')
+            } finally {
+              setBackupRestoring(false)
             }
           })()
         }}

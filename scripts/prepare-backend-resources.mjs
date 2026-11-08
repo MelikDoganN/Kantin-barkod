@@ -70,6 +70,21 @@ function main() {
     throw new Error('npm install --omit=dev failed in resources/backend')
   }
 
+  // The backend runs on the separately bundled Node 20 runtime, not Electron's ABI.
+  const rebuild = spawnSync(
+    npm,
+    [
+      'rebuild',
+      `--target=${process.env.KANTIN_NODE_VERSION || '20.18.1'}`,
+      '--runtime=node',
+      '--dist-url=https://nodejs.org/download/release',
+    ],
+    { cwd: outDir, stdio: 'inherit', shell: true },
+  )
+  if (rebuild.status !== 0) {
+    throw new Error('Backend native modules could not be rebuilt for bundled Node 20')
+  }
+
   const generate = spawnSync(npm, ['exec', 'prisma', 'generate'], {
     cwd: outDir,
     stdio: 'inherit',
@@ -77,6 +92,12 @@ function main() {
   })
   if (generate.status !== 0) {
     throw new Error('prisma generate failed in resources/backend')
+  }
+
+  for (const entry of fs.readdirSync(path.join(outDir, 'prisma'))) {
+    if (/\.(db|sqlite|sqlite3)(-wal|-shm)?$/.test(entry)) {
+      fs.rmSync(path.join(outDir, 'prisma', entry), { force: true })
+    }
   }
 
   // Do not ship .env into the package

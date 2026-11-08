@@ -9,7 +9,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-installer:
@@ -36,8 +36,25 @@ jobs:
           npm ci
           npm ci --prefix backend
 
+      - name: Lint and build
+        run: |
+          npm run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build:backend
+
+      - name: SQLite and POS regression tests
+        run: npm test --prefix backend
+
       - name: Build Windows installer
         run: npm run dist:installer
+
+      - name: Verify bundled Windows runtime and native modules
+        shell: pwsh
+        run: |
+          & './release/win-unpacked/resources/runtime/node/node.exe' './scripts/verify-packaged-backend.mjs' './release/win-unpacked/resources/backend'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
@@ -45,3 +62,11 @@ jobs:
           name: KantinBarkodPOS-Setup-x64
           path: release/KantinBarkodPOS-Setup-x64.exe
           if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Kantin Barkod POS ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release/KantinBarkodPOS-Setup-x64.exe

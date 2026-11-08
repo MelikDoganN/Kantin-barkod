@@ -11,6 +11,7 @@ router.use(requireRoles('ADMIN'))
 router.post('/', backupController.create)
 router.get('/', backupController.list)
 router.get('/:id/download', backupController.download)
+router.post('/:id/restore', backupController.restore)
 router.delete('/:id', backupController.remove)
 
 export default router

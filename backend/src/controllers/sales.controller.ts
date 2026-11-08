@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express'
 import { z } from 'zod'
-import { PaymentType } from '@prisma/client'
+import { PaymentType } from '../types/enums'
 import { AppError } from '../middleware/errorHandler'
 import { success } from '../utils/apiResponse'
 import * as salesService from '../services/sales.service'

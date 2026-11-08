@@ -1,8 +1,3 @@
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "AuditLog_userId_createdAt_idx" ON "AuditLog"("userId", "createdAt");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "AuditLog_module_createdAt_idx" ON "AuditLog"("module", "createdAt");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "AuditLog_actionType_createdAt_idx" ON "AuditLog"("actionType", "createdAt");
+-- Legacy migration marker retained for an ordered SQLite migration history.
+-- The SQLite baseline migration creates the schema; this placeholder is intentionally a no-op.
+SELECT 1;

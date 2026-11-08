@@ -1,5 +1,6 @@
-import { Prisma, StockMovementType } from '@prisma/client'
-import { prisma } from '../config/database'
+import { Prisma } from '@prisma/client'
+import { StockMovementType } from '../types/enums'
+import { prisma, type AppTransactionClient } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { buildImageUrl, serializeProductBrief } from '../utils/product-image-url'
 
@@ -12,7 +13,7 @@ function computeStatus(shelfQuantity: number, minimumStock: number): StockStatus
 }
 
 async function writeAuditLog(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   params: {
     userId: number | null
     actionType: string
@@ -40,7 +41,7 @@ async function writeAuditLog(
   })
 }
 
-async function getProductWithInventory(tx: Prisma.TransactionClient, productId: number) {
+async function getProductWithInventory(tx: AppTransactionClient, productId: number) {
   const product = await tx.product.findUnique({
     where: { id: productId },
     include: { inventory: true, category: { select: { id: true, name: true } } },

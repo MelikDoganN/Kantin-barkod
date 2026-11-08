@@ -1,11 +1,8 @@
 import {
-  DayEndStatus,
-  PaymentType,
   Prisma,
-  SaleStatus,
-  ShiftStatus,
 } from '@prisma/client'
-import { prisma } from '../config/database'
+import { DayEndStatus, PaymentType, SaleStatus, ShiftStatus } from '../types/enums'
+import { prisma, type AppTransactionClient } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 import { buildImageUrl } from '../utils/product-image-url'
 
@@ -15,7 +12,7 @@ function toNumber(value: { toString(): string } | number | null | undefined): nu
 }
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value.toFixed(2))
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 function formatTime(iso: Date): string {
@@ -26,20 +23,20 @@ function formatDate(iso: Date): string {
   return iso.toLocaleDateString('tr-TR')
 }
 
-function mapPayment(type: PaymentType | null): 'cash' | 'card' | 'debt' {
+function mapPayment(type: string | null): 'cash' | 'card' | 'debt' {
   if (type === PaymentType.CASH) return 'cash'
   if (type === PaymentType.CARD) return 'card'
   return 'debt'
 }
 
-function mapStatus(status: DayEndStatus): 'pending' | 'completed' | 'reviewed' {
+function mapStatus(status: string): 'pending' | 'completed' | 'reviewed' {
   if (status === DayEndStatus.PENDING) return 'pending'
   if (status === DayEndStatus.REVIEWED) return 'reviewed'
   return 'completed'
 }
 
 async function writeAuditLog(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   params: {
     userId: number
     actionType: string
@@ -65,7 +62,7 @@ async function writeAuditLog(
   })
 }
 
-async function computeShiftSales(tx: Prisma.TransactionClient | typeof prisma, shiftId: number) {
+async function computeShiftSales(tx: AppTransactionClient | typeof prisma, shiftId: number) {
   const sales = await tx.sale.findMany({
     where: { shiftId, status: SaleStatus.COMPLETED },
     include: {
@@ -103,7 +100,7 @@ async function computeShiftSales(tx: Prisma.TransactionClient | typeof prisma, s
 
 function serializeListItem(dayEnd: {
   id: number
-  status: DayEndStatus
+  status: string
   totalSales: { toString(): string } | number
   cashAmount: { toString(): string } | number
   cardAmount: { toString(): string } | number

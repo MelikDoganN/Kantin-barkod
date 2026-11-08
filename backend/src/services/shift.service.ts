@@ -1,10 +1,8 @@
 import {
-  PaymentType,
   Prisma,
-  SaleStatus,
-  ShiftStatus,
 } from '@prisma/client'
-import { prisma } from '../config/database'
+import { PaymentType, SaleStatus, ShiftStatus } from '../types/enums'
+import { prisma, type AppTransactionClient } from '../config/database'
 import { AppError } from '../middleware/errorHandler'
 
 function toNumber(value: { toString(): string } | number | null | undefined): number {
@@ -13,11 +11,11 @@ function toNumber(value: { toString(): string } | number | null | undefined): nu
 }
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value.toFixed(2))
+  return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
 async function writeAuditLog(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   params: {
     userId: number
     actionType: string
@@ -45,7 +43,7 @@ async function writeAuditLog(
   })
 }
 
-async function computeSalesSummary(tx: Prisma.TransactionClient | typeof prisma, shiftId: number) {
+async function computeSalesSummary(tx: AppTransactionClient | typeof prisma, shiftId: number) {
   const sales = await tx.sale.findMany({
     where: { shiftId, status: SaleStatus.COMPLETED },
     select: {
@@ -80,7 +78,7 @@ async function computeSalesSummary(tx: Prisma.TransactionClient | typeof prisma,
 function formatShiftListItem(
   shift: {
     id: number
-    status: ShiftStatus
+    status: string
     startTime: Date
     endTime: Date | null
     openingCash: { toString(): string } | number
@@ -378,7 +376,7 @@ export async function getShiftById(shiftId: number, userId: number, role: string
 
 /** Satış servisi için: kullanıcının açık vardiyasını döner veya hata fırlatır. */
 export async function requireOpenShift(
-  tx: Prisma.TransactionClient,
+  tx: AppTransactionClient,
   userId: number,
 ) {
   const shift = await tx.shift.findFirst({

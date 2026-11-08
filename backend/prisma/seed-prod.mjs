@@ -24,7 +24,7 @@ try {
   // dotenv optional if DATABASE_URL already set
 }
 
-const { PrismaClient, UserRole, UserStatus } = require('@prisma/client')
+const { PrismaClient } = require('@prisma/client')
 const argon2 = require('argon2')
 
 const prisma = new PrismaClient()
@@ -63,8 +63,8 @@ async function main() {
       fullName: 'Sistem Yoneticisi',
       username: 'admin',
       passwordHash,
-      role: UserRole.ADMIN,
-      status: UserStatus.ACTIVE,
+      role: 'ADMIN',
+      status: 'ACTIVE',
     },
   })
 

@@ -1,7 +1,7 @@
 {
   "name": "kantin-pos-backend",
   "version": "1.0.0",
-  "description": "Kantin POS backend API (Express + Prisma + PostgreSQL)",
+  "description": "Kantin POS backend API (Express + Prisma + SQLite)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test": "npm run build && node --test tests/*.test.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -27,6 +28,7 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "argon2": "^0.44.0",
+    "better-sqlite3": "^11.10.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -35,6 +37,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",

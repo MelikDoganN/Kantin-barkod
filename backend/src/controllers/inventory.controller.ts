@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express'
 import { z } from 'zod'
-import { StockMovementType } from '@prisma/client'
+import { StockMovementType } from '../types/enums'
 import { AppError } from '../middleware/errorHandler'
 import { success } from '../utils/apiResponse'
 import * as inventoryService from '../services/inventory.service'
