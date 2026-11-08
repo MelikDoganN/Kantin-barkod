@@ -1,0 +1,43 @@
+name: Publish verified Windows installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Windows installer workflow run ID
+        required: true
+      tag:
+        description: New release tag (for example v2.0.0)
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate build and publish its installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_RUN_ID: ${{ inputs.run_id }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > /tmp/build.json
+          jq -e '.conclusion == "success" and .path == ".github/workflows/windows-installer.yml"' /tmp/build.json
+          build_sha=$(jq -r .head_sha /tmp/build.json)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to overwrite it.'
+            exit 1
+          fi
+          gh run download "$BUILD_RUN_ID" --name KantinBarkodPOS-Setup-x64 --dir installer-artifact
+          test -s installer-artifact/KantinBarkodPOS-Setup-x64.exe
+          gh release create "$RELEASE_TAG" installer-artifact/KantinBarkodPOS-Setup-x64.exe \
+            --target "$build_sha" --title "Kantin Barkod POS $RELEASE_TAG" --notes-file SQLITE-RELEASE.md
