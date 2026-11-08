@@ -5,7 +5,6 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { pathToFileURL } from 'node:url'
 
 const backend = path.resolve(process.argv[2])
 assert.equal(process.platform, 'win32')
@@ -14,10 +13,10 @@ const require = createRequire(path.join(backend, 'package.json'))
 const Database = require('better-sqlite3')
 const argon2 = require('argon2')
 const { PrismaClient } = require('@prisma/client')
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kantin-packaged-'))
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kantin Packaged Türkçe % -'))
 const database = path.join(temporary, 'data', 'kantin.db')
 Object.assign(process.env, {
-  DATABASE_URL: pathToFileURL(database).href,
+  DATABASE_URL: `file:${database.replace(/\\/g, '/')}`,
   SQLITE_DATABASE_PATH: database,
   SQLITE_BACKUP_DIR: path.join(temporary, 'backups'),
   ELECTRON_USER_DATA_PATH: temporary,

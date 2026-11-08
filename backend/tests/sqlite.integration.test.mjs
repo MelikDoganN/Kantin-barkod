@@ -3,16 +3,16 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { pathToFileURL, fileURLToPath } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { spawnSync, spawn } from 'node:child_process'
 import { once } from 'node:events'
 import Database from 'better-sqlite3'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kantin-sqlite-'))
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kantin SQLite Türkçe % -'))
 const database = path.join(temporary, 'data', 'kantin.db')
 Object.assign(process.env, {
-  DATABASE_URL: pathToFileURL(database).href,
+  DATABASE_URL: `file:${database.replace(/\\/g, '/')}`,
   SQLITE_DATABASE_PATH: database,
   SQLITE_BACKUP_DIR: path.join(temporary, 'backups'),
   ELECTRON_USER_DATA_PATH: temporary,
@@ -189,12 +189,12 @@ test('SQLite offline lifecycle and POS regression', async (t) => {
       const corrupt = path.join(temporary, 'corrupt.db')
       fs.writeFileSync(corrupt, 'not a sqlite database')
       const before = fs.readFileSync(corrupt)
-      const result = prepare({ DATABASE_URL: pathToFileURL(corrupt).href, SQLITE_DATABASE_PATH: corrupt })
+      const result = prepare({ DATABASE_URL: `file:${corrupt.replace(/\\/g, '/')}`, SQLITE_DATABASE_PATH: corrupt })
       assert.notEqual(result.status, 0)
       assert.deepEqual(fs.readFileSync(corrupt), before)
     })
   } finally {
-    if (api) { const exited = once(api, 'exit'); api.kill(); await exited }
+    if (api && api.exitCode === null && api.signalCode === null) { const exited = once(api, 'exit'); api.kill(); await exited }
     await prisma?.$disconnect()
     fs.rmSync(temporary, { recursive: true, force: true })
   }

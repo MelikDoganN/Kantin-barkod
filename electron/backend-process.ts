@@ -3,7 +3,6 @@ import fs from 'node:fs'
 import crypto from 'node:crypto'
 import http from 'node:http'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
 import {
   appendLog,
   getBackupsDir,
@@ -194,7 +193,8 @@ export async function startBackendProcess(
   const envCandidates = resolveEnvFilePaths(backendRoot)
   const databaseFile = getDatabaseFilePath()
   fs.mkdirSync(getDatabaseDir(), { recursive: true })
-  const databaseUrl = pathToFileURL(databaseFile).href
+  // Prisma SQLite expects a file: path, not an encoded WHATWG file URL on Windows.
+  const databaseUrl = `file:${databaseFile.replace(/\\/g, '/')}`
 
   log(`userData=${userData}`)
   log(`backendRoot=${backendRoot}`)
