@@ -1,5 +1,5 @@
 /**
- * Finds Inno Setup Compiler (ISCC.exe) and builds Kantin-POS-Setup.exe
+ * Finds Inno Setup Compiler (ISCC.exe) and builds the x64 release installer.
  */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -65,7 +65,7 @@ function main() {
     throw new Error(`ISCC failed with code ${result.status}`)
   }
 
-  const out = path.join(root, 'dist-installer', 'Kantin-Barkod-Setup.exe')
+  const out = path.join(root, 'release', 'KantinBarkodPOS-Setup-x64.exe')
   if (!fs.existsSync(out)) {
     throw new Error(`Expected output missing: ${out}`)
   }

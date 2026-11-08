@@ -1,33 +1,23 @@
-# Kantin Barkod Sistemi — Installer (Faz 1)
+# Kantin Barkod POS — Windows x64 Installer
 
-Inno Setup ana kurulum yöneticisidir. electron-builder yalnızca
-`release/win-unpacked` üretir.
+Inno Setup installs the Electron application and bundled Node.js/backend. The installer does not install PostgreSQL, create or reset databases, change database users, run Prisma migrations, or seed data.
 
-**AppData (değiştirilmedi):** `%APPDATA%\Kantin POS`  
-(Electron `productName` / `app.setName('Kantin POS')` ile uyumlu)
+## Build on Windows x64
 
-## Geliştirici kurulum derleme
+Install Node.js 22 and Inno Setup 6, then run:
 
-```bash
-npm run download:node
-npm run dist
-# opsiyonel: installer/vendor/postgresql-windows-x64.exe
-npm run build:installer
-# veya hepsi:
+```text
+npm ci
+npm ci --prefix backend
 npm run dist:installer
 ```
 
-Çıktı: `dist-installer/Kantin-Barkod-Setup.exe`
+Output: `release/KantinBarkodPOS-Setup-x64.exe`. The GitHub Actions workflow at `.github/workflows/windows-installer.yml` runs the same build on `windows-latest` and publishes it as an artifact.
 
-| Öğe | Değer |
-|---|---|
-| Kurulum klasörü | `C:\Program Files\KantinBarkod` |
-| Exe | `Kantin POS.exe` (AppData uyumu) |
-| Masaüstü kısayolu | Kantin Barkod Sistemi |
-| DB | `kantin_pos` |
-| Log | `%APPDATA%\Kantin POS\logs\install.log` |
+## PostgreSQL first launch
 
-## İlk giriş
+The app connects to `localhost:5432`, database `kantin_pos`, user `postgres`. On first launch, enter the existing PostgreSQL password once. Electron `safeStorage` protects it with the Windows account's DPAPI-backed encryption and saves it under `%APPDATA%\Kantin POS\config\db-credentials.bin`. The password is not embedded in the installer or written to `.env`.
 
-- Kullanıcı: `admin`
-- Şifre: `admin123`
+Before serving the API, the backend opens a Prisma connection to the configured database. A connection/database error is reported to the user; no schema migration or seed is run.
+
+User files, logs, backups, and the encrypted credential remain under `%APPDATA%\Kantin POS` when the app is uninstalled.

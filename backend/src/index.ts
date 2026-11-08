@@ -12,6 +12,7 @@ import {
   CONFIG_DIR,
 } from './utils/paths'
 import { checkScheduledBackup } from './services/backup.service'
+import { prisma } from './config/database'
 import authRoutes from './routes/auth.routes'
 import categoryRoutes from './routes/category.routes'
 import productRoutes from './routes/product.routes'
@@ -70,9 +71,25 @@ app.use('/api/cash-adjustments', cashAdjustmentRoutes)
 app.use(notFoundHandler)
 app.use(errorHandler)
 
-app.listen(env.port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Kantin POS API http://localhost:${env.port} adresinde çalışıyor`)
+void prisma
+  .$connect()
+  .then(() => {
+    app.listen(env.port, () => {
+      // eslint-disable-next-line no-console
+      console.log(`Kantin POS API http://localhost:${env.port} adresinde çalışıyor`)
 
-  void checkScheduledBackup()
-})
+      void checkScheduledBackup()
+    })
+  })
+  .catch((error: unknown) => {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String(error.code)
+        : 'unknown'
+    // Do not log Prisma's raw error: it can include connection details.
+    // eslint-disable-next-line no-console
+    console.error(
+      `[database] PostgreSQL connection failed (code=${code}). Check the service, database, and credentials.`,
+    )
+    process.exit(1)
+  })

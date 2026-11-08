@@ -41,7 +41,7 @@
   },
   "build": {
     "appId": "com.kantinpos.app",
-    "productName": "Kantin POS",
+    "productName": "Kantin Barkod POS",
     "copyright": "Copyright © Kantin POS",
     "directories": {
       "output": "release",
@@ -86,7 +86,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Kantin POS"
+      "shortcutName": "Kantin Barkod POS"
     },
     "asar": true
   }

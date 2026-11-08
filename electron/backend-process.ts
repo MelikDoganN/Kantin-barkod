@@ -107,13 +107,15 @@ async function isAlreadyHealthy(port: number): Promise<boolean> {
  * Start backend if needed, wait until /api/health succeeds.
  * Skips spawn when an API is already listening on the port (e.g. `npm run dev` in backend).
  */
-export async function startBackendProcess(): Promise<{ port: number; spawned: boolean }> {
+export async function startBackendProcess(
+  secureDatabaseUrl?: string,
+): Promise<{ port: number; spawned: boolean }> {
   const port = getBackendPort()
   const userData = getUserDataPath()
   const backendRoot = getBackendRoot()
   const entry = getBackendEntry()
 
-  if (await isAlreadyHealthy(port)) {
+  if (!secureDatabaseUrl && await isAlreadyHealthy(port)) {
     log(`API already healthy on port ${port} - spawn skipped`)
     return { port, spawned: false }
   }
@@ -150,8 +152,8 @@ export async function startBackendProcess(): Promise<{ port: number; spawned: bo
         env[key] = value
       }
     }
-    // Always prefer file values for DB connection from installer config
-    if (parsed.DATABASE_URL) {
+    // Local development may still use .env. Packaged credentials are injected below.
+    if (!secureDatabaseUrl && parsed.DATABASE_URL) {
       env.DATABASE_URL = parsed.DATABASE_URL
     }
     if (parsed.JWT_SECRET) {
@@ -162,21 +164,12 @@ export async function startBackendProcess(): Promise<{ port: number; spawned: bo
     break
   }
 
+  if (secureDatabaseUrl) {
+    env.DATABASE_URL = secureDatabaseUrl
+  }
+
   log(`env file used: ${loadedEnvPath ?? '(none)'}`)
   log(`DATABASE_URL in spawn env: ${env.DATABASE_URL ? 'set' : 'MISSING'}`)
-
-  // Ensure backend cwd also has .env so Prisma/dotenv cwd fallback works
-  if (loadedEnvPath) {
-    const backendEnvPath = path.join(backendRoot, '.env')
-    try {
-      if (path.resolve(loadedEnvPath) !== path.resolve(backendEnvPath)) {
-        fs.copyFileSync(loadedEnvPath, backendEnvPath)
-        log(`Copied env -> ${backendEnvPath}`)
-      }
-    } catch (err) {
-      log(`Could not copy env to backend cwd: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
 
   if (!env.DATABASE_URL) {
     throw new Error(
@@ -220,12 +213,22 @@ export async function startBackendProcess(): Promise<{ port: number; spawned: bo
     }
   })
 
+  let startupExitHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined
+  const exitedDuringStartup = new Promise<never>((_resolve, reject) => {
+    startupExitHandler = (code, signal) => {
+      reject(new Error(`Backend exited before readiness (code=${code}, signal=${signal ?? 'none'})`))
+    }
+    child.once('exit', startupExitHandler)
+  })
+
   try {
-    await waitForHealth(port, 45_000)
+    await Promise.race([waitForHealth(port, 45_000), exitedDuringStartup])
     log(`Healthy on http://127.0.0.1:${port}`)
   } catch (err) {
     stopBackendProcess()
     throw err
+  } finally {
+    if (startupExitHandler) child.off('exit', startupExitHandler)
   }
 
   return { port, spawned: true }
