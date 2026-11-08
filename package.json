@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:backend": "npm run build --prefix backend",
+    "build:backend": "npm run prisma:generate --prefix backend && npm run build --prefix backend",
     "prepare:backend": "node scripts/prepare-backend-resources.mjs",
     "download:node": "node scripts/download-node-runtime.mjs",
     "preview": "vite preview",
