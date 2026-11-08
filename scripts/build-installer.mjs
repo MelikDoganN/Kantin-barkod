@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
 const iss = path.join(root, 'installer', 'KantinPOS.iss')
-const unpacked = path.join(root, 'release', 'win-unpacked', 'Kantin POS.exe')
+const unpacked = path.join(root, 'release', 'win-unpacked', 'Kantin Barkod POS.exe')
 const nodeExe = path.join(root, 'resources', 'runtime', 'node', 'node.exe')
 const backendEntry = path.join(
   root,
