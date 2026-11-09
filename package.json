@@ -1,7 +1,7 @@
 {
   "name": "kantin-barkod",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Profesyonel kantin barkodlu satis ve stok yonetim POS uygulamasi",
   "author": "Kantin POS",
   "main": "dist-electron/main.js",
@@ -17,7 +17,8 @@
     "dist": "npm run download:node && npm run build && npm run build:backend && npm run prepare:backend && electron-builder --win dir",
     "build:installer": "node scripts/build-installer.mjs",
     "dist:installer": "npm run dist && npm run build:installer",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:electron": "playwright test --config playwright.electron.config.ts"
   },
   "dependencies": {
     "lucide-react": "^0.454.0",

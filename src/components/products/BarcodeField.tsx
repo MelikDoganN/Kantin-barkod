@@ -48,7 +48,8 @@ export const BarcodeField = forwardRef<BarcodeFieldHandle, BarcodeFieldProps>(fu
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter') return
     event.preventDefault()
-    onEnter?.(sanitizeBarcodeInput(value))
+    event.stopPropagation()
+    onEnter?.(sanitizeBarcodeInput(event.currentTarget.value))
   }
 
   return (

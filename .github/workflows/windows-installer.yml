@@ -53,6 +53,9 @@ jobs:
       - name: Browser sales and scanner regression tests
         run: npm run test:browser
 
+      - name: Electron scanner and window shortcut regression tests
+        run: npm run test:electron
+
       - name: Build Windows installer
         run: npm run dist:installer
 

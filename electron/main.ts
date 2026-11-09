@@ -1,5 +1,6 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, Menu } from 'electron'
 import path from 'node:path'
+import { configureScannerInput } from './scanner-input'
 import { startBackendProcess, stopBackendProcess } from './backend-process'
 import { appendLog, ensureUserDataDirs, getRendererDist, isPackaged } from './paths'
 
@@ -25,6 +26,8 @@ let win: BrowserWindow | null = null
 let backendStartedByUs = false
 
 function createWindow() {
+  // Hiding the default menu leaves accelerators active. Remove it on Windows/Linux.
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
   win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -40,6 +43,9 @@ function createWindow() {
       contextIsolation: true,
     },
   })
+
+  if (process.platform !== 'darwin') win.removeMenu()
+  configureScannerInput(win, (message) => appendLog('app.log', message))
 
   win.once('ready-to-show', () => win?.show())
   if (VITE_DEV_SERVER_URL) void win.loadURL(VITE_DEV_SERVER_URL)
