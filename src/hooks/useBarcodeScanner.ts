@@ -12,6 +12,8 @@ export function useBarcodeScanner(onScan: (barcode: string) => void, enabled: bo
     let lastKeyAt = 0
     const reset = () => { buffer = ''; lastKeyAt = 0 }
     const handleKey = (event: KeyboardEvent) => {
+      // A scanner CR suffix may press Control before Electron normalizes Ctrl+M.
+      if (event.key === 'Control' || event.key === 'Shift') return
       const target = event.target instanceof HTMLElement ? event.target : null
       if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey ||
           target?.closest('input, textarea, select, [contenteditable="true"]')) {

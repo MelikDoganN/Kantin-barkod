@@ -61,8 +61,10 @@ async function nativeScan(barcode: string, suffix = 'm') {
       contents.sendInputEvent({ type: 'keyUp', keyCode: key })
       await new Promise(resolve => setTimeout(resolve, 5))
     }
+    contents.sendInputEvent({ type: 'keyDown', keyCode: 'Control', modifiers: ['control'] })
     contents.sendInputEvent({ type: 'keyDown', keyCode: suffix.toUpperCase(), modifiers: ['control'] })
     contents.sendInputEvent({ type: 'keyUp', keyCode: suffix.toUpperCase(), modifiers: ['control'] })
+    contents.sendInputEvent({ type: 'keyUp', keyCode: 'Control' })
   }, { barcode, suffix })
 }
 
@@ -85,6 +87,10 @@ test('scanner Ctrl+M adds a sale item without minimizing; manual minimize still 
   await expect(input).toHaveValue('')
   await expect(page.locator('aside').last().getByText('Test Su', { exact: true })).toBeVisible()
   expect(await minimized()).toBe(false)
+  await page.getByRole('link', { name: 'Ana Sayfa', exact: true }).focus()
+  await nativeScan('8690000000001')
+  await expect(page.locator('aside').last().getByText('2 ürün', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/#\/sales$/)
   await nativeScan('')
   expect(await minimized()).toBe(false)
   await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize())
